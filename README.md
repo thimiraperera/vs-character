@@ -128,6 +128,23 @@ which means it follows a resolution change or a character resize on its own. At
 is 174px, which is two lines at the default size. Longer captions than the band
 holds will spill over the artwork, so drop the font size if that happens.
 
+### The font
+
+`UN-Sandhyanee.ttf` sits at the repo root and is the first family in the caption
+stack. It is a Unicode Sinhala face, mapping U+0D80 to U+0DFF with a `GSUB`
+table for conjuncts, and it carries digits and punctuation.
+
+It has no Latin letters at all, though: no A to Z, no a to z. So English in a
+caption falls through to the next family in the stack rather than rendering.
+That is why the default is
+
+```css
+font-family: UN-Sandhyanee, Segoe UI, Roboto, sans-serif;
+```
+
+and why the fallbacks matter. A caption mixing Sinhala and English will show the
+Sinhala in UN-Sandhyanee and the English in Segoe UI.
+
 ### Styling them
 
 The **Subtitle CSS** box is a live stylesheet. Type in it and the caption
@@ -162,6 +179,30 @@ what the view is zoomed to.
 The caption text lives in a `.subtitle-text` box inside the band. That is what
 lets a `<b>` sit inline mid-sentence: the band centres one child, and dropping
 the text straight into it would turn every inline run into its own row.
+
+## Recording
+
+**Record** plays from the start and writes a video while you drive the scene.
+Press 1, 2 and the arrow keys as it runs; the frames follow along. It stops on
+its own when the audio finishes, or at the end of the last subtitle line when
+there is no audio, and a **Save the video** button appears. Stop early by
+pressing the button again.
+
+The frame is painted rather than screen-grabbed. Every part of the scene is
+measured off the live page, divided by the view scale to put it back into
+canvas pixels, and drawn onto a canvas at the full output size. So the file is a
+true 1080 x 1920 even when the window is only showing the canvas at 46%, and
+nothing outside the canvas can wander into shot.
+
+Chrome writes MP4 with H.264 and AAC; browsers without it fall back to WebM, and
+the file is named to match. The audio is tapped from the same element that is
+playing, so picture and voice come out of one clock and stay together.
+
+Captions are the exception to the painting: rather than reimplementing text
+layout, the caption element is handed back to the browser inside an SVG, with
+the page's own stylesheet and the font embedded, and the result is composited
+in. That way whatever CSS the box and the subtitle file agree on is what lands
+in the video. It is redrawn when the line changes rather than every frame.
 
 ## Canvas
 

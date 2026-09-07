@@ -131,6 +131,7 @@
 
   var canvasW = 1080;
   var canvasH = 1920;
+  var viewK = 1;
 
   function applyScale() {
     var mode = zoom.value;
@@ -158,6 +159,7 @@
       k = parseFloat(mode);
     }
 
+    viewK = k;
     stage.style.transform = "scale(" + k + ")";
     stageHolder.style.width = Math.round(canvasW * k) + "px";
     stageHolder.style.height = Math.round(canvasH * k) + "px";
@@ -473,6 +475,7 @@
   function setCaption(html) {
     subtitleText.innerHTML = html;
     subtitle.classList.toggle("has-text", html !== "");
+    buildCaption();
   }
 
   function renderCue(time) {
@@ -520,7 +523,7 @@
      between the squares and the character. This is only how it looks. */
   var DEFAULT_CSS = [
     ".subtitle{",
-    "  font-family: Segoe UI, Roboto, sans-serif;",
+    "  font-family: UN-Sandhyanee, Segoe UI, Roboto, sans-serif;",
     "  font-size: 52px;",
     "  font-weight: 700;",
     "  line-height: 1.3;",
@@ -681,6 +684,7 @@
       startedAt = performance.now();
 
       if (haveAudio()) {
+        wakeAudioGraph();
         var started = audio.play();
 
         /* If the browser refuses to start the track, the clock would sit at
@@ -725,6 +729,376 @@
   });
 
   drawClock();
+
+  /* ---------- drawing the scene onto a canvas ---------- */
+
+  /* The recording is painted rather than screen-grabbed, so what comes out is a
+     true 1080 x 1920 whatever the view is zoomed to. Everything is measured
+     off the live page and divided by the view scale, which puts it back into
+     canvas pixels, so the frame cannot drift away from the preview. */
+  var frame = document.createElement("canvas");
+  var brush = frame.getContext("2d");
+
+  var skyEl = document.querySelector(".sky");
+  var glowEl = document.querySelector(".glow");
+  var floorEl = document.querySelector(".floor");
+  var slotEls = document.querySelectorAll(".slot");
+
+  function boxOf(el) {
+    var r = el.getBoundingClientRect();
+    var base = stage.getBoundingClientRect();
+    var k = viewK || 1;
+    return {
+      x: (r.left - base.left) / k,
+      y: (r.top - base.top) / k,
+      w: r.width / k,
+      h: r.height / k
+    };
+  }
+
+  function roundedPath(x, y, w, h, r) {
+    brush.beginPath();
+    if (brush.roundRect) { brush.roundRect(x, y, w, h, r); return; }
+    brush.moveTo(x + r, y);
+    brush.arcTo(x + w, y, x + w, y + h, r);
+    brush.arcTo(x + w, y + h, x, y + h, r);
+    brush.arcTo(x, y + h, x, y, r);
+    brush.arcTo(x, y, x + w, y, r);
+    brush.closePath();
+  }
+
+  function drawCover(img, x, y, w, h) {
+    var iw = img.naturalWidth, ih = img.naturalHeight;
+    if (!iw || !ih) return;
+    var scale = Math.max(w / iw, h / ih);
+    var dw = iw * scale, dh = ih * scale;
+    brush.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  }
+
+  function drawScene() {
+    if (frame.width !== canvasW || frame.height !== canvasH) {
+      frame.width = canvasW;
+      frame.height = canvasH;
+    }
+
+    brush.clearRect(0, 0, canvasW, canvasH);
+
+    var sky = brush.createLinearGradient(0, 0, 0, canvasH);
+    sky.addColorStop(0, "#cfe9ff");
+    sky.addColorStop(0.42, "#e6f1fb");
+    sky.addColorStop(1, "#fdf3e6");
+    brush.fillStyle = sky;
+    brush.fillRect(0, 0, canvasW, canvasH);
+
+    var g = boxOf(glowEl);
+    var gx = g.x + g.w / 2, gy = g.y + g.h / 2;
+    var glow = brush.createRadialGradient(gx, gy, 0, gx, gy, g.w / 2);
+    glow.addColorStop(0, "rgba(255,236,196,.95)");
+    glow.addColorStop(0.38, "rgba(255,236,196,.45)");
+    glow.addColorStop(0.68, "rgba(255,236,196,0)");
+    brush.fillStyle = glow;
+    brush.fillRect(g.x, g.y, g.w, g.h);
+
+    var f = boxOf(floorEl);
+    var floor = brush.createLinearGradient(0, f.y, 0, f.y + f.h);
+    floor.addColorStop(0, "rgba(126,150,178,0)");
+    floor.addColorStop(0.6, "rgba(126,150,178,.16)");
+    floor.addColorStop(1, "rgba(96,120,150,.26)");
+    brush.fillStyle = floor;
+    brush.fillRect(f.x, f.y, f.w, f.h);
+
+    for (var i = 0; i < slotEls.length; i++) {
+      var el = slotEls[i];
+      var b = boxOf(el);
+      var radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+
+      brush.save();
+      brush.shadowColor = "rgba(30,45,70,.10)";
+      brush.shadowBlur = 26;
+      brush.shadowOffsetY = 10;
+      roundedPath(b.x, b.y, b.w, b.h, radius);
+      brush.fillStyle = el.classList.contains("is-filled") ? "#ffffff" : "rgba(255,255,255,.55)";
+      brush.fill();
+      brush.restore();
+
+      var shown = el.querySelector(".slot-img.is-front");
+      if (el.classList.contains("is-filled") && shown && shown.naturalWidth) {
+        brush.save();
+        roundedPath(b.x, b.y, b.w, b.h, radius);
+        brush.clip();
+        drawCover(shown, b.x, b.y, b.w, b.h);
+        brush.restore();
+      }
+
+      brush.save();
+      roundedPath(b.x, b.y, b.w, b.h, radius);
+      brush.strokeStyle = "rgba(23,32,58,.10)";
+      brush.lineWidth = 1;
+      brush.stroke();
+      brush.restore();
+    }
+
+    var sh = boxOf(castShadow);
+    brush.save();
+    brush.translate(sh.x + sh.w / 2, sh.y + sh.h / 2);
+    brush.scale(sh.w / 2, sh.h / 2);
+    var cast = brush.createRadialGradient(0, 0, 0, 0, 0, 1);
+    cast.addColorStop(0, "rgba(40,55,80,.42)");
+    cast.addColorStop(0.45, "rgba(40,55,80,.20)");
+    cast.addColorStop(0.72, "rgba(40,55,80,0)");
+    brush.fillStyle = cast;
+    brush.fillRect(-1, -1, 2, 2);
+    brush.restore();
+
+    var pose = poses[current];
+    if (pose && pose.naturalWidth) {
+      var p = boxOf(pose);
+      brush.drawImage(pose, p.x, p.y, p.w, p.h);
+    }
+
+    if (captionArt) brush.drawImage(captionArt, 0, 0, canvasW, canvasH);
+  }
+
+  /* ---------- the caption, drawn through the browser's own layout ---------- */
+
+  /* Captions carry whatever CSS the box and the file between them ask for, so
+     rather than reimplementing any of that on the canvas the real element is
+     handed back to the browser inside an SVG and rasterised. It only has to
+     happen when the line changes, not every frame. */
+  var captionArt = null;
+  var captionKey = "";
+  var fontData = null;
+  var sheetText = null;
+
+  /* The face is embedded rather than linked, because a relative url inside a
+     data-url SVG has nothing to resolve against. */
+  function loadFontData() {
+    return fetch("../UN-Sandhyanee.ttf")
+      .then(function (r) { return r.ok ? r.arrayBuffer() : null; })
+      .then(function (buf) {
+        if (!buf) { fontData = ""; return; }
+        var bytes = new Uint8Array(buf), bin = "";
+        for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        fontData = "data:font/ttf;base64," + btoa(bin);
+      })
+      .catch(function () { fontData = ""; });
+  }
+
+  /* The page's own stylesheet goes into the SVG, so the caption is laid out by
+     the same rules that place it on screen rather than by a second copy of
+     them that could drift. The linked face is dropped on the way in, since the
+     embedded one replaces it. */
+  function loadSheet() {
+    return fetch("style.css")
+      .then(function (r) { return r.ok ? r.text() : ""; })
+      .then(function (text) { sheetText = text.replace(/@font-face\s*\{[^}]*\}/gi, ""); })
+      .catch(function () { sheetText = ""; });
+  }
+
+  function rootVars() {
+    var names = ["--w", "--h", "--edge", "--slot-top", "--floor", "--char-height", "--breath"];
+    var root = getComputedStyle(document.documentElement);
+    var out = ":root{";
+    for (var i = 0; i < names.length; i++) {
+      out += names[i] + ":" + root.getPropertyValue(names[i]) + ";";
+    }
+    return out + "}";
+  }
+
+  function buildCaption() {
+    var html = subtitle.classList.contains("has-text") ? subtitleText.innerHTML : "";
+    var key = html + "|" + canvasW + "x" + canvasH + "|" + cssBox.value;
+    if (key === captionKey) return;
+
+    if (!html) { captionKey = key; captionArt = null; return; }
+
+    /* The stylesheet may still be on its way. Leave the key alone so this runs
+       again once it lands, rather than marking the caption done. */
+    if (sheetText === null) return;
+    captionKey = key;
+
+    /* An SVG is read as XML, where a bare <br> is a syntax error. */
+    var body = html.replace(/<br\s*>/gi, "<br/>");
+
+    var face = fontData
+      ? '@font-face{font-family:"UN-Sandhyanee";src:url(' + fontData + ') format("truetype");}'
+      : "";
+
+    /* CDATA keeps the stylesheet away from the XML parser. */
+    var css = "<style><![CDATA[" + face + rootVars() + sheetText + cssBox.value + "]]></style>";
+
+    var doc =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + canvasW + '" height="' + canvasH + '">' +
+      '<foreignObject x="0" y="0" width="' + canvasW + '" height="' + canvasH + '">' +
+      '<div xmlns="http://www.w3.org/1999/xhtml" class="stage">' +
+      css +
+      '<div class="subtitle has-text"><div class="subtitle-text">' + body + "</div></div>" +
+      "</div></foreignObject></svg>";
+
+    var art = new Image();
+    art.onload = function () { captionArt = art; };
+    art.onerror = function () { captionArt = null; };
+    art.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(doc);
+  }
+
+  /* ---------- recording ---------- */
+
+  var recBtn = document.getElementById("recBtn");
+  var recLabel = document.getElementById("recLabel");
+  var recInfo = document.getElementById("recInfo");
+  var recSave = document.getElementById("recSave");
+
+  var recorder = null;
+  var chunks = [];
+  var saveUrl = "";
+  var drawing = 0;
+  var painting = 0;
+  var actx = null;
+  var audioTap = null;
+
+  function wakeAudioGraph() {
+    if (actx && actx.state === "suspended") actx.resume();
+  }
+
+  /* An element can only ever be tapped once, so the graph is built on the first
+     recording and kept. Feeding it back to the speakers as well is what stops
+     the tap from silencing playback. */
+  function audioTracks() {
+    if (!haveAudio()) return [];
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return [];
+    if (!actx) {
+      try {
+        actx = new AC();
+        var tap = actx.createMediaElementSource(audio);
+        audioTap = actx.createMediaStreamDestination();
+        tap.connect(actx.destination);
+        tap.connect(audioTap);
+      } catch (err) {
+        actx = null;
+        return [];
+      }
+    }
+    wakeAudioGraph();
+    return audioTap.stream.getAudioTracks();
+  }
+
+  function pickFormat() {
+    var wanted = [
+      "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+      "video/mp4",
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm"
+    ];
+    for (var i = 0; i < wanted.length; i++) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(wanted[i])) return wanted[i];
+    }
+    return "";
+  }
+
+  function lastCueEnd() {
+    var end = 0;
+    for (var i = 0; i < cues.length; i++) if (cues[i].end > end) end = cues[i].end;
+    return end;
+  }
+
+  function paintLoop() {
+    if (!recorder) return;
+    buildCaption();
+    drawScene();
+
+    /* Nothing else knows when to stop, so the run ends with the track, or with
+       the last subtitle line when there is no track. */
+    var stopAt = haveAudio() ? (isFinite(audio.duration) ? audio.duration : 0) : lastCueEnd();
+    if (playing && stopAt && elapsed >= stopAt) {
+      stopRecording();
+      return;
+    }
+    drawing = requestAnimationFrame(paintLoop);
+  }
+
+  function startRecording() {
+    if (recorder) return;
+
+    if (!window.MediaRecorder || !frame.captureStream) {
+      recInfo.textContent = "this browser cannot record";
+      return;
+    }
+
+    var format = pickFormat();
+    if (!format) {
+      recInfo.textContent = "this browser cannot record";
+      return;
+    }
+
+    if (saveUrl) { URL.revokeObjectURL(saveUrl); saveUrl = ""; }
+    recSave.hidden = true;
+    chunks = [];
+
+    resetClock();
+    frame.width = canvasW;
+    frame.height = canvasH;
+    captionKey = "";
+    buildCaption();
+    drawScene();
+
+    var stream = frame.captureStream(30);
+    var voice = audioTracks();
+    for (var i = 0; i < voice.length; i++) stream.addTrack(voice[i]);
+
+    try {
+      recorder = new MediaRecorder(stream, { mimeType: format, videoBitsPerSecond: 12000000 });
+    } catch (err) {
+      recInfo.textContent = "this browser cannot record";
+      return;
+    }
+
+    recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+
+    recorder.onstop = function () {
+      var kind = format.indexOf("mp4") !== -1 ? "mp4" : "webm";
+      var blob = new Blob(chunks, { type: format.split(";")[0] });
+      saveUrl = URL.createObjectURL(blob);
+      recSave.href = saveUrl;
+      recSave.download = "character." + kind;
+      recSave.hidden = false;
+      recInfo.textContent = kind + ", " + (blob.size / 1048576).toFixed(1) + " MB";
+    };
+
+    recorder.start();
+    painting = setInterval(function () { buildCaption(); drawScene(); }, 200);
+    recBtn.classList.add("is-live");
+    recLabel.textContent = "Stop";
+    recInfo.textContent = "recording " + canvasW + " x " + canvasH +
+      (voice.length ? " with audio" : ", no audio loaded");
+
+    setPlaying(true);
+    drawing = requestAnimationFrame(paintLoop);
+  }
+
+  function stopRecording() {
+    if (!recorder) return;
+    if (drawing) { cancelAnimationFrame(drawing); drawing = 0; }
+    if (painting) { clearInterval(painting); painting = 0; }
+    setPlaying(false);
+    recInfo.textContent = "saving";
+    try { recorder.stop(); } catch (err) {}
+    recorder = null;
+    recBtn.classList.remove("is-live");
+    recLabel.textContent = "Record";
+  }
+
+  recBtn.addEventListener("click", function () {
+    if (recorder) stopRecording();
+    else startRecording();
+    recBtn.blur();
+  });
+
+  audio.addEventListener("ended", function () { if (recorder) stopRecording(); });
+
+  loadFontData();
+  loadSheet();
 
   /* ---------- warm the artwork ---------- */
 
