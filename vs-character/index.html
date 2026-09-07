@@ -14,7 +14,7 @@
     <path d="M10.5 18.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
   </svg>
   <h1>Open this on a desktop</h1>
-  <p>The scene is built at a fixed portrait video size and driven with the arrow keys, so it needs a larger screen and a keyboard.</p>
+  <p>The scene is built at a fixed portrait video size and driven from the keyboard, so it needs a larger screen.</p>
 </div>
 
 <main class="workspace">
@@ -28,34 +28,24 @@
       <div class="floor"></div>
 
       <div class="slots">
-        <div class="slot" data-slot="a">
+        <div class="slot" data-slot="a" title="Click for the next image">
+          <img class="slot-img is-front" alt="">
           <img class="slot-img" alt="">
           <div class="slot-empty">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 6v12M6 12h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
             </svg>
           </div>
-          <button class="slot-clear" type="button" aria-label="Remove image">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </button>
-          <input class="slot-file" type="file" accept="image/*" hidden>
         </div>
 
-        <div class="slot" data-slot="b">
+        <div class="slot" data-slot="b" title="Click for the next image">
+          <img class="slot-img is-front" alt="">
           <img class="slot-img" alt="">
           <div class="slot-empty">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 6v12M6 12h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
             </svg>
           </div>
-          <button class="slot-clear" type="button" aria-label="Remove image">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-          </button>
-          <input class="slot-file" type="file" accept="image/*" hidden>
         </div>
       </div>
 
@@ -68,6 +58,8 @@
         <img class="pose"       data-pose="shrugging"      src="shrugging/shrugging.png"           alt="Character shrugging">
         <img class="pose"       data-pose="arms-folded"    src="arms-folded/arms-folded.png"       alt="Character with arms folded">
       </div>
+
+      <div class="subtitle" id="subtitle" aria-live="polite"></div>
 
     </div>
    </div>
@@ -92,6 +84,73 @@
         </button>
       </div>
       <p class="note">Hold an arrow key. Let go to stand.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Playback</h2>
+      <div class="transport">
+        <button class="btn btn-play" id="playBtn" type="button" aria-label="Play">
+          <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>
+          <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5.5v13M15 5.5v13"/></svg>
+          <span id="playLabel">Play</span>
+        </button>
+        <button class="btn btn-ghost" id="resetBtn" type="button" aria-label="Back to start">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6v12M18.5 6.5v11a.6.6 0 0 1-.95.48L10 12l7.55-5.98a.6.6 0 0 1 .95.48z"/></svg>
+        </button>
+      </div>
+      <p class="clock" id="clock">0:00.0</p>
+      <p class="note">Space plays and pauses.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Images</h2>
+
+      <div class="row">
+        <span class="row-key">1</span>
+        <span class="row-name">Left</span>
+        <span class="row-count" id="countA">none</span>
+      </div>
+      <div class="row-actions">
+        <button class="btn btn-ghost btn-wide" type="button" data-pick="a">Choose images</button>
+        <button class="btn btn-ghost" type="button" data-clear="a" aria-label="Clear left images">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+        </button>
+      </div>
+
+      <div class="row row-gap">
+        <span class="row-key">2</span>
+        <span class="row-name">Right</span>
+        <span class="row-count" id="countB">none</span>
+      </div>
+      <div class="row-actions">
+        <button class="btn btn-ghost btn-wide" type="button" data-pick="b">Choose images</button>
+        <button class="btn btn-ghost" type="button" data-clear="b" aria-label="Clear right images">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+        </button>
+      </div>
+
+      <p class="note">Click a square, or press 1 and 2, for the next image. Files stay on your computer.</p>
+
+      <input class="hidden-file" id="fileA" type="file" accept="image/*" multiple hidden>
+      <input class="hidden-file" id="fileB" type="file" accept="image/*" multiple hidden>
+    </section>
+
+    <section class="panel">
+      <h2>Subtitles</h2>
+      <div class="row-actions">
+        <button class="btn btn-ghost btn-wide" id="pickSubs" type="button">Choose .srt or .vtt</button>
+        <button class="btn btn-ghost" id="clearSubs" type="button" aria-label="Clear subtitles">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+        </button>
+      </div>
+      <p class="row-count" id="subsInfo">none</p>
+      <input id="fileSubs" type="file" accept=".srt,.vtt,text/vtt,application/x-subrip,text/plain" hidden>
+
+      <label class="field field-css">
+        <span>Subtitle CSS</span>
+        <textarea id="subsCss" spellcheck="false" rows="10"></textarea>
+      </label>
+      <p class="note" id="cssNote">Edits apply as you type.</p>
     </section>
 
     <section class="panel">

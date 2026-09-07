@@ -13,6 +13,9 @@
   --edge: 24px;
   --slot-top: 48px;
 
+  /* How quickly one slot image dissolves into the next. */
+  --slot-fade: 140ms;
+
   /* Idle breathing depth. Set to 0 for a perfectly static character. */
   --breath: 0.008;
 
@@ -148,16 +151,18 @@ body{
 
 .slot.is-over{ box-shadow: 0 0 0 3px #2f7fd8, 0 10px 26px rgba(30,45,70,.16); }
 
+/* Two stacked layers so one image can dissolve into the next. */
 .slot-img{
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: none;
+  opacity: 0;
+  transition: opacity var(--slot-fade) linear;
 }
 
-.slot.is-filled .slot-img{ display: block; }
+.slot-img.is-front{ opacity: 1; }
 .slot.is-filled{ background: none; }
 .slot.is-filled .slot-empty{ display: none; }
 
@@ -251,14 +256,36 @@ body{
 .pose[data-pose="shrugging"]      { --fit: .9681; --cx: .5147; --fb: .0247; }
 .pose[data-pose="arms-folded"]    { --fit: .9661; --cx: .4932; --fb: .0221; }
 
+/* ---------- subtitle ---------- */
+
+/* Only the structural parts live here. Everything about how it looks is in the
+   editable stylesheet, which is appended after this file and so wins. */
+.subtitle{
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+  white-space: pre-wrap;
+}
+
+.subtitle:empty{ display: none; }
+
 /* ---------- side controls, outside the canvas ---------- */
 
 .controls{
-  flex: 0 0 232px;
-  align-self: center;
+  flex: 0 0 288px;
+  align-self: stretch;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.controls::-webkit-scrollbar{ width: 10px; }
+.controls::-webkit-scrollbar-thumb{
+  border: 3px solid #0d1017;
+  border-radius: 6px;
+  background: #2b3342;
 }
 
 .panel{
@@ -374,3 +401,126 @@ body{
   .workspace{ display: none; }
   .too-small{ display: flex; }
 }
+
+/* ---------- buttons, rows and fields in the panels ---------- */
+
+.transport{
+  display: flex;
+  gap: 8px;
+}
+
+.btn{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 10px;
+  background: #1e2531;
+  color: #cdd6e4;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+
+.btn svg{
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.btn:hover{ background: #252d3b; color: #e7ecf4; }
+.btn:focus-visible{ outline: 2px solid #2f7fd8; outline-offset: 2px; }
+
+.btn-wide{ flex: 1 1 auto; }
+
+.btn-play{
+  flex: 1 1 auto;
+  background: #2f7fd8;
+  border-color: #2f7fd8;
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn-play:hover{ background: #3a8ce6; border-color: #3a8ce6; color: #fff; }
+.btn-play .icon-play{ fill: currentColor; stroke: none; }
+.btn-play .icon-pause{ display: none; }
+.btn-play.is-playing .icon-play{ display: none; }
+.btn-play.is-playing .icon-pause{ display: block; }
+
+.clock{
+  margin: 12px 0 0;
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: #e7ecf4;
+}
+
+.row{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.row-gap{ margin-top: 16px; }
+
+.row-key{
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 6px;
+  background: #1e2531;
+  font-size: 11px;
+  font-weight: 700;
+  color: #9fb0c8;
+}
+
+.row-name{
+  flex: 1 1 auto;
+  font-size: 13px;
+  color: #cdd6e4;
+}
+
+.row-count{
+  margin: 0;
+  font-size: 12px;
+  color: #6b7688;
+}
+
+.row-actions{
+  display: flex;
+  gap: 8px;
+}
+
+.field-css{ margin-top: 14px; }
+
+.field-css textarea{
+  width: 100%;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 9px;
+  background: #11161f;
+  color: #cfe0f5;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  tab-size: 2;
+}
+
+.field-css textarea:focus-visible{ outline: 2px solid #2f7fd8; outline-offset: 1px; }
+
+.note.is-bad{ color: #e0745f; }
