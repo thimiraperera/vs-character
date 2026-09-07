@@ -523,16 +523,18 @@
      between the squares and the character. This is only how it looks. */
   var DEFAULT_CSS = [
     ".subtitle{",
-    "  font-family: UN-Sandhyanee, Segoe UI, Roboto, sans-serif;",
-    "  font-size: 52px;",
-    "  font-weight: 700;",
-    "  line-height: 1.3;",
-    "  text-align: center;",
-    "  color: #1d2a44;",
-    "  text-shadow: 0 2px 0 rgba(255,255,255,.65);",
+    "\tfont-family: UN-Sandhyanee, Segoe UI, Roboto, sans-serif;",
+    "\tfont-size: 56px;",
+    "\tfont-weight: 500;",
+    "\tline-height: 1.3;",
+    "\ttext-align: center;",
+    "\tcolor: #1d2a44;",
+    "\ttext-shadow: 0 2px 0 rgba(255,255,255,.65);",
     "}",
     "",
-    ".subtitle b{ color: #c8442e; }"
+    ".subtitle b {",
+    "\tcolor: #c8442e;",
+    "}"
   ].join("\n");
 
   var cssBox = document.getElementById("subsCss");
@@ -949,6 +951,7 @@
   var recSave = document.getElementById("recSave");
 
   var recorder = null;
+  var arming = false;
   var chunks = [];
   var saveUrl = "";
   var drawing = 0;
@@ -1018,8 +1021,21 @@
     drawing = requestAnimationFrame(paintLoop);
   }
 
+  /* The caption is drawn from a picture of itself, and that picture needs the
+     stylesheet and the font to have arrived. Pressing Record the moment the
+     page opens used to beat them to it and leave the captions out of the file
+     entirely, so the take waits instead. */
+  function captionReady(done) {
+    var tries = 0;
+    (function poll() {
+      if (!subtitle.classList.contains("has-text") || captionArt || tries > 25) { done(); return; }
+      tries++;
+      setTimeout(poll, 20);
+    })();
+  }
+
   function startRecording() {
-    if (recorder) return;
+    if (recorder || arming) return;
 
     if (!window.MediaRecorder || !frame.captureStream) {
       recInfo.textContent = "this browser cannot record";
@@ -1032,6 +1048,12 @@
       return;
     }
 
+    if (sheetText === null || fontData === null) {
+      recInfo.textContent = "getting the caption ready";
+      setTimeout(startRecording, 120);
+      return;
+    }
+
     if (saveUrl) { URL.revokeObjectURL(saveUrl); saveUrl = ""; }
     recSave.hidden = true;
     chunks = [];
@@ -1039,8 +1061,24 @@
     resetClock();
     frame.width = canvasW;
     frame.height = canvasH;
+
+    /* Put the opening line up before the first frame is taken. */
+    renderCue(0);
     captionKey = "";
     buildCaption();
+
+    arming = true;
+    recBtn.classList.add("is-live");
+    recLabel.textContent = "Stop";
+    recInfo.textContent = "starting";
+    captionReady(function () {
+      arming = false;
+      if (recorder) return;
+      beginRecording(format);
+    });
+  }
+
+  function beginRecording(format) {
     drawScene();
 
     var stream = frame.captureStream(30);
@@ -1051,6 +1089,8 @@
       recorder = new MediaRecorder(stream, { mimeType: format, videoBitsPerSecond: 12000000 });
     } catch (err) {
       recInfo.textContent = "this browser cannot record";
+      recBtn.classList.remove("is-live");
+      recLabel.textContent = "Record";
       return;
     }
 
@@ -1068,8 +1108,6 @@
 
     recorder.start();
     painting = setInterval(function () { buildCaption(); drawScene(); }, 200);
-    recBtn.classList.add("is-live");
-    recLabel.textContent = "Stop";
     recInfo.textContent = "recording " + canvasW + " x " + canvasH +
       (voice.length ? " with audio" : ", no audio loaded");
 
@@ -1078,6 +1116,14 @@
   }
 
   function stopRecording() {
+    if (arming && !recorder) {
+      arming = false;
+      recBtn.classList.remove("is-live");
+      recLabel.textContent = "Record";
+      recInfo.textContent = "ready";
+      setPlaying(false);
+      return;
+    }
     if (!recorder) return;
     if (drawing) { cancelAnimationFrame(drawing); drawing = 0; }
     if (painting) { clearInterval(painting); painting = 0; }
