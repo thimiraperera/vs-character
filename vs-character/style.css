@@ -259,15 +259,36 @@ body{
 /* ---------- subtitle ---------- */
 
 /* Only the structural parts live here. Everything about how it looks is in the
-   editable stylesheet, which is appended after this file and so wins. */
+   editable stylesheet, which is appended after this file and so wins.
+
+   The box fills the gap between the bottom of the squares and the top of the
+   character, worked out from the same variables that place those two, so it
+   keeps its place when the resolution or the character height changes.
+     top    = where the squares start + how tall a square is
+     bottom = ground clearance + character height */
 .subtitle{
   position: absolute;
   z-index: 5;
+  left: var(--edge);
+  right: var(--edge);
+  top: calc(var(--slot-top) + (var(--w) * 1px - 3 * var(--edge)) / 2);
+  bottom: calc(var(--floor) + var(--char-height));
+  display: none;
+  padding: 16px 0;
   pointer-events: none;
-  white-space: pre-wrap;
 }
 
-.subtitle:empty{ display: none; }
+/* Shown only while a line is on screen. The band centres a single child, and
+   that child holds the text: putting the caption straight into a flex box
+   would make every inline run inside it, a <b> included, its own flex item
+   and stack them one per line. */
+.subtitle.has-text{
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.subtitle-text{ white-space: pre-wrap; }
 
 /* ---------- side controls, outside the canvas ---------- */
 

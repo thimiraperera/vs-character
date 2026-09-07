@@ -388,6 +388,7 @@
   /* ---------- subtitles ---------- */
 
   var subtitle = document.getElementById("subtitle");
+  var subtitleText = document.getElementById("subtitleText");
   var subsInfo = document.getElementById("subsInfo");
   var subsFile = document.getElementById("fileSubs");
   var cues = [];
@@ -450,6 +451,11 @@
     return found;
   }
 
+  function setCaption(html) {
+    subtitleText.innerHTML = html;
+    subtitle.classList.toggle("has-text", html !== "");
+  }
+
   function renderCue(time) {
     var found = -1;
     for (var i = 0; i < cues.length; i++) {
@@ -457,13 +463,13 @@
     }
     if (found === shownCue) return;
     shownCue = found;
-    subtitle.innerHTML = found === -1 ? "" : cues[found].html;
+    setCaption(found === -1 ? "" : cues[found].html);
   }
 
   function clearSubs() {
     cues = [];
     shownCue = -1;
-    subtitle.innerHTML = "";
+    setCaption("");
     subsInfo.textContent = "none";
   }
 
@@ -476,7 +482,7 @@
     reader.onload = function () {
       cues = parseCues(String(reader.result));
       shownCue = -1;
-      subtitle.innerHTML = "";
+      setCaption("");
       subsInfo.textContent = cues.length
         ? file.name + ", " + cues.length + " lines"
         : file.name + ", nothing readable";
@@ -491,21 +497,20 @@
 
   /* ---------- subtitle styling ---------- */
 
+  /* Position is handled in style.css, which parks the caption in the gap
+     between the squares and the character. This is only how it looks. */
   var DEFAULT_CSS = [
     ".subtitle{",
-    "  left: 40px;",
-    "  right: 40px;",
-    "  bottom: 150px;",
     "  font-family: Segoe UI, Roboto, sans-serif;",
     "  font-size: 52px;",
     "  font-weight: 700;",
     "  line-height: 1.3;",
     "  text-align: center;",
-    "  color: #ffffff;",
-    "  text-shadow: 0 4px 14px rgba(0,0,0,.55);",
+    "  color: #1d2a44;",
+    "  text-shadow: 0 2px 0 rgba(255,255,255,.65);",
     "}",
     "",
-    ".subtitle b{ color: #ffd34d; }"
+    ".subtitle b{ color: #c8442e; }"
   ].join("\n");
 
   var cssBox = document.getElementById("subsCss");
@@ -585,7 +590,7 @@
     setPlaying(false);
     elapsed = 0;
     shownCue = -1;
-    subtitle.innerHTML = "";
+    setCaption("");
     drawClock();
   }
 

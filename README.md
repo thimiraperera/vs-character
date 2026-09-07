@@ -76,6 +76,22 @@ VTT cue settings after the end stamp. These tags survive into the caption:
 Anything else is shown as literal text rather than being treated as markup, so a
 stray angle bracket in a subtitle file cannot inject anything into the page.
 
+### Where they sit
+
+Captions are centred in the band between the bottom of the two squares and the
+top of the character's head, so they never cover either. That band is worked out
+from the same variables that place the squares and the character:
+
+```
+top    = --slot-top + square height
+bottom = --floor + --char-height
+```
+
+which means it follows a resolution change or a character resize on its own. At
+1080 x 1920 the band is 488px tall; at 1080 x 1350, the tightest of the four, it
+is 174px, which is two lines at the default size. Longer captions than the band
+holds will spill over the artwork, so drop the font size if that happens.
+
 ### Styling them
 
 The **Subtitle CSS** box is a live stylesheet. Type in it and the caption
@@ -83,20 +99,21 @@ updates as you go. It starts as:
 
 ```css
 .subtitle{
-  left: 40px;
-  right: 40px;
-  bottom: 150px;
   font-family: Segoe UI, Roboto, sans-serif;
   font-size: 52px;
   font-weight: 700;
   line-height: 1.3;
   text-align: center;
-  color: #ffffff;
-  text-shadow: 0 4px 14px rgba(0,0,0,.55);
+  color: #1d2a44;
+  text-shadow: 0 2px 0 rgba(255,255,255,.65);
 }
 
-.subtitle b{ color: #ffd34d; }
+.subtitle b{ color: #c8442e; }
 ```
+
+Position is deliberately absent: the band above handles it, and everything in
+the box is about how the caption looks. Setting `top`, `bottom`, `left` or
+`right` here still works if you want it somewhere else entirely.
 
 It is real CSS with nothing scoped away, so `.subtitle b`, `.subtitle .name`
 from a `<c.name>` tag, animations and the rest all work. The line under the box
@@ -105,6 +122,10 @@ applied`, one of them has a typo.
 
 Sizes are in canvas pixels, so `52px` means 52px of a 1080-wide export no matter
 what the view is zoomed to.
+
+The caption text lives in a `.subtitle-text` box inside the band. That is what
+lets a `<b>` sit inline mid-sentence: the band centres one child, and dropping
+the text straight into it would turn every inline run into its own row.
 
 ## Canvas
 
