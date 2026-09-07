@@ -155,7 +155,13 @@ body{
 
 .slot.is-over{ box-shadow: 0 0 0 3px #2f7fd8, 0 10px 26px rgba(30,45,70,.16); }
 
-/* Two stacked layers so one image can dissolve into the next. */
+.slot-stack{
+  position: absolute;
+  inset: 0;
+}
+
+/* One layer per picture, all of them loaded and decoded up front. Stepping to
+   the next is a class change, so there is nothing to fetch mid-swap. */
 .slot-img{
   position: absolute;
   inset: 0;
@@ -163,10 +169,16 @@ body{
   height: 100%;
   object-fit: cover;
   opacity: 0;
+  z-index: 1;
   transition: opacity var(--slot-fade) linear;
 }
 
+/* Only the arriving layer fades, over the outgoing one which is left fully
+   opaque underneath until it is covered. Fading both at once leaves a moment
+   where neither covers the square and the backdrop shows through it, which is
+   what reads as a blink. */
 .slot-img.is-front{ opacity: 1; }
+.slot-img.is-top{ z-index: 2; }
 .slot.is-filled{ background: none; }
 .slot.is-filled .slot-empty{ display: none; }
 

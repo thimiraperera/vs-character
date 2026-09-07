@@ -55,8 +55,17 @@ it is copied, stored, or sent anywhere. The flip side is that object URLs do not
 survive a page reload, so after refreshing you pick the files again. The panel
 always shows what is currently loaded.
 
-Every image is decoded up front, so stepping through them never waits on the
-disk mid-recording.
+Every picture becomes its own element in the square and is decoded before it can
+be asked for, with the panel counting them in as they arrive. Stepping to the
+next one is then a change of class: there is nothing to fetch and nothing to
+decode at the moment it matters.
+
+The dissolve only fades the arriving picture in. The one going out keeps its
+full opacity underneath until it is completely covered, which is what stops the
+square blinking. Fading both at once, as an even crossfade does, leaves a moment
+where neither one covers the square and the backdrop shows through the pair of
+them: at the midpoint of a 50/50 fade a quarter of the background comes through,
+and that is what reads as the picture vanishing before the next appears.
 
 ## Audio
 

@@ -209,63 +209,78 @@
      nothing is copied or uploaded anywhere. Object URLs do not survive a
      reload, which is why the panel always shows what is currently loaded. */
   var reels = {
-    a: { urls: [], index: 0, el: null, front: null, back: null, count: null },
-    b: { urls: [], index: 0, el: null, front: null, back: null, count: null }
+    a: { urls: [], layers: [], index: 0, el: null, stack: null, count: null, timer: 0 },
+    b: { urls: [], layers: [], index: 0, el: null, stack: null, count: null, timer: 0 }
   };
 
-  function releaseUrls(reel) {
-    for (var i = 0; i < reel.urls.length; i++) URL.revokeObjectURL(reel.urls[i]);
-    reel.urls = [];
-    reel.index = 0;
+  function fadeMs() {
+    var raw = getComputedStyle(document.documentElement).getPropertyValue("--slot-fade");
+    var ms = parseFloat(raw);
+    if (!isFinite(ms)) return 140;
+    return raw.indexOf("ms") === -1 ? ms * 1000 : ms;
   }
 
   function describe(reel) {
-    if (!reel.urls.length) return "none";
-    return (reel.index + 1) + " of " + reel.urls.length;
+    if (!reel.layers.length) return "none";
+    return (reel.index + 1) + " of " + reel.layers.length;
   }
 
-  function paint(name, immediate) {
+  function clearReel(name) {
     var reel = reels[name];
+    if (reel.timer) { clearTimeout(reel.timer); reel.timer = 0; }
+    for (var i = 0; i < reel.urls.length; i++) URL.revokeObjectURL(reel.urls[i]);
+    for (i = 0; i < reel.layers.length; i++) reel.layers[i].remove();
+    reel.urls = [];
+    reel.layers = [];
+    reel.index = 0;
+    reel.el.classList.remove("is-filled");
+    reel.count.textContent = "none";
+  }
+
+  function show(name, index, animate) {
+    var reel = reels[name];
+    if (!reel.layers.length) return;
+
+    var prev = reel.layers[reel.index];
+    var next = reel.layers[index];
+    reel.index = index;
     reel.count.textContent = describe(reel);
 
-    if (!reel.urls.length) {
-      reel.el.classList.remove("is-filled");
-      reel.front.removeAttribute("src");
-      reel.back.removeAttribute("src");
+    if (!next) return;
+
+    if (!animate || !prev || prev === next) {
+      if (reel.timer) { clearTimeout(reel.timer); reel.timer = 0; }
+      for (var i = 0; i < reel.layers.length; i++) {
+        reel.layers[i].classList.remove("is-front", "is-top");
+      }
+      next.classList.add("is-front", "is-top");
       return;
     }
 
-    var url = reel.urls[reel.index];
-    reel.el.classList.add("is-filled");
+    /* The arriving layer goes on top still transparent, then fades up over the
+       outgoing one, which keeps its full opacity underneath the whole time. */
+    prev.classList.remove("is-top");
+    next.classList.add("is-top");
+    next.classList.remove("is-front");
 
-    if (immediate) {
-      reel.front.src = url;
-      reel.front.classList.add("is-front");
-      reel.back.classList.remove("is-front");
-      return;
-    }
+    /* Let that starting point be a real frame, or the browser folds it into the
+       same style change and there is nothing to animate from. */
+    void next.offsetWidth;
+    next.classList.add("is-front");
 
-    /* Load into the layer underneath, then swap which one sits on top. */
-    var incoming = reel.back;
-    var outgoing = reel.front;
-    incoming.src = url;
-
-    var swap = function () {
-      incoming.classList.add("is-front");
-      outgoing.classList.remove("is-front");
-      reel.front = incoming;
-      reel.back = outgoing;
-    };
-
-    if (incoming.decode) incoming.decode().then(swap, swap);
-    else swap();
+    if (reel.timer) clearTimeout(reel.timer);
+    reel.timer = setTimeout(function () {
+      reel.timer = 0;
+      for (var i = 0; i < reel.layers.length; i++) {
+        if (reel.layers[i] !== next) reel.layers[i].classList.remove("is-front");
+      }
+    }, fadeMs() + 40);
   }
 
   function advance(name) {
     var reel = reels[name];
-    if (reel.urls.length < 2) return;
-    reel.index = (reel.index + 1) % reel.urls.length;
-    paint(name, false);
+    if (reel.layers.length < 2) return;
+    show(name, (reel.index + 1) % reel.layers.length, true);
   }
 
   function loadImages(name, files) {
@@ -280,36 +295,78 @@
       return x.name.localeCompare(y.name, undefined, { numeric: true, sensitivity: "base" });
     });
 
-    var startedEmpty = reel.urls.length === 0;
-    for (var j = 0; j < picked.length; j++) reel.urls.push(URL.createObjectURL(picked[j]));
+    var startedEmpty = reel.layers.length === 0;
+    var arriving = [];
 
-    /* Decode everything up front so a click never waits on the disk. */
-    for (var k = 0; k < reel.urls.length; k++) {
-      var warm = new Image();
-      warm.src = reel.urls[k];
-      if (warm.decode) warm.decode().catch(function () {});
+    for (var j = 0; j < picked.length; j++) {
+      var url = URL.createObjectURL(picked[j]);
+      var layer = document.createElement("img");
+      layer.className = "slot-img";
+      layer.alt = "";
+      layer.src = url;
+      reel.stack.appendChild(layer);
+      reel.urls.push(url);
+      reel.layers.push(layer);
+      arriving.push(layer);
     }
 
-    /* Adding to a reel that already has something showing should not yank the
-       picture out from under you, so only a first load jumps to the front. */
-    if (startedEmpty) reel.index = 0;
-    paint(name, true);
+    reel.el.classList.add("is-filled");
+
+    /* Held as live elements rather than as a list of addresses, and every one
+       decoded before it can be asked for, so a step never waits on the disk
+       and never shows a half-drawn square. */
+    var done = 0;
+    var total = arriving.length;
+    reel.count.textContent = "loading 0 of " + total;
+
+    var jobs = [];
+    for (var k = 0; k < arriving.length; k++) {
+      jobs.push(warm(arriving[k]));
+    }
+
+    /* decode() is the best signal that a picture is ready to paint, but a
+       browser under no obligation to paint anything can leave it pending for
+       ever. Whichever of these arrives first is enough to move on, and none of
+       them can strand the reel on the loading count. */
+    function warm(layer) {
+      return new Promise(function (go) {
+          var settled = false;
+          function ready() {
+            if (settled) return;
+            settled = true;
+            go();
+          }
+
+          if (layer.decode) layer.decode().then(ready, ready);
+          if (layer.complete && layer.naturalWidth) ready();
+          else {
+            layer.addEventListener("load", ready);
+            layer.addEventListener("error", ready);
+          }
+          setTimeout(ready, 4000);
+        }).then(function () {
+          done++;
+          reel.count.textContent = "loading " + done + " of " + total;
+        });
+    }
+
+    Promise.all(jobs).then(function () {
+      show(name, startedEmpty ? 0 : reel.index, false);
+    });
   }
 
   ["a", "b"].forEach(function (name) {
     var reel = reels[name];
     var box = document.querySelector('.slot[data-slot="' + name + '"]');
-    var layers = box.querySelectorAll(".slot-img");
     var input = document.getElementById("file" + name.toUpperCase());
 
     reel.el = box;
-    reel.front = layers[0];
-    reel.back = layers[1];
+    reel.stack = box.querySelector(".slot-stack");
     reel.count = document.getElementById("count" + name.toUpperCase());
 
     box.addEventListener("click", function (e) {
       if (e.target.closest(".slot-add")) return;
-      if (reel.urls.length) advance(name);
+      if (reel.layers.length) advance(name);
       else input.click();
     });
 
@@ -329,8 +386,7 @@
     }
 
     document.querySelector('[data-clear="' + name + '"]').addEventListener("click", function () {
-      releaseUrls(reel);
-      paint(name, true);
+      clearReel(name);
     });
 
     box.addEventListener("dragover", function (e) {
@@ -347,8 +403,6 @@
       box.classList.remove("is-over");
       if (e.dataTransfer && e.dataTransfer.files.length) loadImages(name, e.dataTransfer.files);
     });
-
-    paint(name, true);
   });
 
   /* ---------- subtitles ---------- */
@@ -827,12 +881,26 @@
       brush.fill();
       brush.restore();
 
-      var shown = el.querySelector(".slot-img.is-front");
-      if (el.classList.contains("is-filled") && shown && shown.naturalWidth) {
+      /* At most two layers are ever lit, and the one marked top paints over the
+         other, so the frame matches what the page is showing mid-fade. */
+      var lit = el.querySelectorAll(".slot-img.is-front");
+      if (el.classList.contains("is-filled") && lit.length) {
         brush.save();
         roundedPath(b.x, b.y, b.w, b.h, radius);
         brush.clip();
-        drawCover(shown, b.x, b.y, b.w, b.h);
+        for (var pass = 0; pass < 2; pass++) {
+          for (var n = 0; n < lit.length; n++) {
+            var layer = lit[n];
+            var onTop = layer.classList.contains("is-top");
+            if ((pass === 0) === onTop) continue;
+            if (!layer.naturalWidth) continue;
+            var alpha = parseFloat(getComputedStyle(layer).opacity);
+            if (!(alpha > 0.004)) continue;
+            brush.globalAlpha = alpha;
+            drawCover(layer, b.x, b.y, b.w, b.h);
+          }
+        }
+        brush.globalAlpha = 1;
         brush.restore();
       }
 
