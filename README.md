@@ -188,11 +188,22 @@ the text straight into it would turn every inline run into its own row.
 
 ## Recording
 
-**Record** plays from the start and writes a video while you drive the scene.
-Press 1, 2 and the arrow keys as it runs; the frames follow along. It stops on
-its own when the audio finishes, or at the end of the last subtitle line when
-there is no audio, and a **Save the video** button appears. Stop early by
-pressing the button again.
+**Record** writes a video while you drive the scene. Press 1, 2 and the arrow
+keys as it runs; the frames follow along.
+
+A take runs in three parts:
+
+| part | length |
+| --- | --- |
+| the opening frame, held | 3 seconds |
+| playback | the audio, or the last subtitle line when there is no audio |
+| the closing frame, held | 3 seconds |
+
+So there is something to cut against at both ends. Playback starts when the
+opening handle finishes, not the moment the button is pressed. Pressing the
+button during playback ends the middle early but still runs the closing handle;
+pressing it again during that handle cuts it short. When it is done a **Save the
+video** button appears.
 
 The frame is painted rather than screen-grabbed. Every part of the scene is
 measured off the live page, divided by the view scale to put it back into
@@ -203,6 +214,11 @@ nothing outside the canvas can wander into shot.
 Recording waits for the caption picture before the first frame is taken, so a
 take started the moment the page opens still has its captions in it rather than
 picking them up a beat late.
+
+The audio is tapped while the button click is still the reason anything is
+happening. Left any later, the browser sees no gesture behind it and can refuse
+to start the track, and since the clock is the track's own position that would
+leave the take frozen at zero with nothing to end it.
 
 Chrome writes MP4 with H.264 and AAC; browsers without it fall back to WebM, and
 the file is named to match. The audio is tapped from the same element that is

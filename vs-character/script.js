@@ -694,8 +694,12 @@
            say why. */
         if (started && started.catch) {
           started.catch(function () {
-            audioInfo.textContent = "the browser blocked playback, press Play again";
+            audioInfo.textContent = "the browser blocked playback, press Play once first";
             setPlaying(false);
+
+            /* The clock is the track's own position, so a refusal leaves it at
+               zero and the take would run until stopped by hand. Wrap it up. */
+            if (recorder) enterTail();
           });
         }
       }
@@ -956,6 +960,14 @@
   var saveUrl = "";
   var drawing = 0;
   var painting = 0;
+
+  /* Every take opens on its first frame and closes on its last, held this long,
+     so there is something to cut against at both ends. */
+  var HANDLE = 3;
+  var phase = "";
+  var phaseUntil = 0;
+  var phaseTimer = 0;
+  var voiceTracks = [];
   var actx = null;
   var audioTap = null;
 
@@ -1006,19 +1018,56 @@
     return end;
   }
 
-  function paintLoop() {
+  /* Nothing else knows how long the middle runs for, so it ends with the
+     track, or with the last subtitle line when there is no track. */
+  function runLength() {
+    if (haveAudio()) return isFinite(audio.duration) ? audio.duration : 0;
+    return lastCueEnd();
+  }
+
+  function startRun() {
+    if (!recorder || phase !== "head") return;
+    phase = "run";
+    recInfo.textContent = "recording " + canvasW + " x " + canvasH +
+      (voiceTracks.length ? " with audio" : ", no audio loaded");
+    setPlaying(true);
+  }
+
+  function enterTail() {
+    if (phase === "tail" || !recorder) return;
+    setPlaying(false);
+    phase = "tail";
+    phaseUntil = performance.now() + HANDLE * 1000;
+    recInfo.textContent = "holding the last frame, press again to cut it short";
+    if (phaseTimer) clearTimeout(phaseTimer);
+    phaseTimer = setTimeout(stopRecording, HANDLE * 1000);
+  }
+
+  function step() {
     if (!recorder) return;
     buildCaption();
     drawScene();
 
-    /* Nothing else knows when to stop, so the run ends with the track, or with
-       the last subtitle line when there is no track. */
-    var stopAt = haveAudio() ? (isFinite(audio.duration) ? audio.duration : 0) : lastCueEnd();
-    if (playing && stopAt && elapsed >= stopAt) {
-      stopRecording();
+    var now = performance.now();
+
+    if (phase === "head") {
+      if (now >= phaseUntil) startRun();
       return;
     }
-    drawing = requestAnimationFrame(paintLoop);
+
+    if (phase === "run") {
+      var len = runLength();
+      if (len && elapsed >= len - 0.03) enterTail();
+      return;
+    }
+
+    if (phase === "tail" && now >= phaseUntil) stopRecording();
+  }
+
+  function paintLoop() {
+    if (!recorder) return;
+    step();
+    if (recorder) drawing = requestAnimationFrame(paintLoop);
   }
 
   /* The caption is drawn from a picture of itself, and that picture needs the
@@ -1067,6 +1116,10 @@
     captionKey = "";
     buildCaption();
 
+    /* Tapped here, while the click is still the reason anything is happening.
+       Left until the timer below it, the browser sees no gesture behind it. */
+    voiceTracks = audioTracks();
+
     arming = true;
     recBtn.classList.add("is-live");
     recLabel.textContent = "Stop";
@@ -1082,8 +1135,7 @@
     drawScene();
 
     var stream = frame.captureStream(30);
-    var voice = audioTracks();
-    for (var i = 0; i < voice.length; i++) stream.addTrack(voice[i]);
+    for (var i = 0; i < voiceTracks.length; i++) stream.addTrack(voiceTracks[i]);
 
     try {
       recorder = new MediaRecorder(stream, { mimeType: format, videoBitsPerSecond: 12000000 });
@@ -1107,11 +1159,14 @@
     };
 
     recorder.start();
-    painting = setInterval(function () { buildCaption(); drawScene(); }, 200);
-    recInfo.textContent = "recording " + canvasW + " x " + canvasH +
-      (voice.length ? " with audio" : ", no audio loaded");
+    painting = setInterval(step, 200);
 
-    setPlaying(true);
+    phase = "head";
+    phaseUntil = performance.now() + HANDLE * 1000;
+    recInfo.textContent = "holding the first frame";
+    if (phaseTimer) clearTimeout(phaseTimer);
+    phaseTimer = setTimeout(startRun, HANDLE * 1000);
+
     drawing = requestAnimationFrame(paintLoop);
   }
 
@@ -1125,6 +1180,8 @@
       return;
     }
     if (!recorder) return;
+    phase = "";
+    if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = 0; }
     if (drawing) { cancelAnimationFrame(drawing); drawing = 0; }
     if (painting) { clearInterval(painting); painting = 0; }
     setPlaying(false);
@@ -1136,12 +1193,17 @@
   }
 
   recBtn.addEventListener("click", function () {
-    if (recorder) stopRecording();
+    /* Stopping by hand still earns the closing handle, so every take has one.
+       Pressing again during that handle cuts it short. */
+    if (recorder && phase === "run") enterTail();
+    else if (recorder) stopRecording();
     else startRecording();
     recBtn.blur();
   });
 
-  audio.addEventListener("ended", function () { if (recorder) stopRecording(); });
+  audio.addEventListener("ended", function () {
+    if (recorder && phase === "run") enterTail();
+  });
 
   loadFontData();
   loadSheet();
