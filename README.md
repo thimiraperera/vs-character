@@ -1,8 +1,8 @@
 # Character
 
-A fixed-size portrait canvas for recording short comparison videos. Two square
-image slots sit at the top, a character stands at the bottom, and holding an
-arrow key changes the pose so she can point at one side, shrug, or fold her arms.
+A fixed-size portrait canvas for recording short comparison videos. Two image
+squares sit at the top, a character stands at the bottom, and everything is
+driven from the keyboard so you can record in one take.
 
 Live: **https://thimiraperera.github.io/vs-character/**
 
@@ -20,28 +20,91 @@ python -m http.server 8123
 
 Then open <http://localhost:8123/vs-character/>.
 
-## Using it
+## Keys
 
-| Input | Pose |
+| Key | Does |
 | --- | --- |
-| Hold Left | `pointing-left` |
-| Hold Right | `pointing-right` |
-| Hold Up | `shrugging` |
-| Hold Down | `arms-folded` |
-| Release | back to `standing` |
+| Hold Left | character points left |
+| Hold Right | character points right |
+| Hold Up | character shrugs |
+| Hold Down | character folds her arms |
+| Release | back to standing |
+| `1` | next image in the left square |
+| `2` | next image in the right square |
+| `Space` | play / pause |
 
-The pad beside the canvas mirrors the arrow keys and lights up with them, and it
-can be held with the mouse instead. Holding two directions at once shows the
-most recent and falls back to the one still held when you let go. A key held
-while the window loses focus never delivers its release, so focus loss resets
-the pose rather than leaving it stuck.
+Clicking a square does the same as its number key. Holding two arrows at once
+shows the most recent and falls back to the one still held when you let go, and
+a key held while the window loses focus resets rather than sticking.
 
-Click either square to pick an image, or drag one onto it. Uploads are resized
-to 1400px, stored in `sessionStorage`, and survive a reload while the tab is
-open. Closing the tab clears them. Hover a filled slot to remove its image.
+Keys are ignored while you are typing in the CSS box.
 
-The controls sit outside the canvas, so nothing but the scene is inside the
-recording area.
+## Images
+
+Load as many as you like into either square, from the panel or by dropping them
+on the square. They are sorted by filename, so `01.jpg, 02.jpg, 10.jpg` land in
+the order you expect. Each press steps to the next one and wraps around at the
+end, with a fast dissolve between them.
+
+Nothing is uploaded. Each file is referenced straight off your disk through an
+object URL, so the count of images is limited only by the machine, and none of
+it is copied, stored, or sent anywhere. The flip side is that object URLs do not
+survive a page reload, so after refreshing you pick the files again. The panel
+always shows what is currently loaded.
+
+Every image is decoded up front, so stepping through them never waits on the
+disk mid-recording.
+
+## Subtitles
+
+Load a `.srt` or `.vtt` file from the panel. It is read in the browser and never
+leaves the machine.
+
+Press Space to start the clock and the lines appear on their own timings. Space
+again pauses, and the reset button returns to zero. Pausing keeps the current
+line on screen, which is handy while framing a shot.
+
+Both formats are handled, including `HH:MM:SS,mmm` and `MM:SS.mmm` stamps and
+VTT cue settings after the end stamp. These tags survive into the caption:
+
+| in the file | becomes |
+| --- | --- |
+| `<b> <i> <u> <em> <strong>` | the same tag |
+| `<c.name>text</c>` | `<span class="name">` |
+| a line break | `<br>` |
+
+Anything else is shown as literal text rather than being treated as markup, so a
+stray angle bracket in a subtitle file cannot inject anything into the page.
+
+### Styling them
+
+The **Subtitle CSS** box is a live stylesheet. Type in it and the caption
+updates as you go. It starts as:
+
+```css
+.subtitle{
+  left: 40px;
+  right: 40px;
+  bottom: 150px;
+  font-family: Segoe UI, Roboto, sans-serif;
+  font-size: 52px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  color: #ffffff;
+  text-shadow: 0 4px 14px rgba(0,0,0,.55);
+}
+
+.subtitle b{ color: #ffd34d; }
+```
+
+It is real CSS with nothing scoped away, so `.subtitle b`, `.subtitle .name`
+from a `<c.name>` tag, animations and the rest all work. The line under the box
+reports how many rules the browser understood; if it says `2 of 3 rules
+applied`, one of them has a typo.
+
+Sizes are in canvas pixels, so `52px` means 52px of a 1080-wide export no matter
+what the view is zoomed to.
 
 ## Canvas
 
@@ -58,9 +121,12 @@ The canvas is always laid out at those exact output pixels. "View" only scales
 what you see; it never changes the composition. Set it to 100% to capture at
 native resolution.
 
-The layout is fixed, not responsive, because the output size has to stay
+The layout is fixed rather than responsive, because the output size has to stay
 predictable. Below 900px wide (or 560px tall) the page shows a short note
 instead of the scene.
+
+All the controls sit outside the canvas, so only the scene is inside the
+recording area.
 
 ## Layout
 
@@ -84,9 +150,9 @@ Measurements inside the canvas, at every resolution:
 
 | what | value |
 | --- | --- |
-| slots start | 48px from the top |
-| slot gaps | 24px left, right, and between |
-| slot shape | square, so each is `(width - 72) / 2` across |
+| squares start | 48px from the top |
+| square gaps | 24px left, right, and between |
+| square shape | square, so each is `(width - 72) / 2` across |
 | character height | 45% of the canvas height |
 | ground clearance | 16px under the feet |
 
@@ -112,7 +178,8 @@ canvas, and `--cx` / `--fb` register the image on the character's feet rather
 than on the file's edges. The result holds to 0.00px on every pose.
 
 Poses cut rather than cross-fade. Dissolving two bodies that stand in slightly
-different places reads as a double exposure instead of one character moving.
+different places reads as a double exposure instead of one character moving. The
+image squares do cross-fade, because there the dissolve is the point.
 
 ## Adding a pose
 
@@ -125,7 +192,7 @@ different places reads as a double exposure instead of one character moving.
 
    It prints the CSS line to paste beside the others in `style.css`.
 3. Add the `<img class="pose" data-pose="<name>" ...>` tag in `index.html`.
-4. Map an input to it in the `KEY_POSES` table in `script.js`.
+4. Map a key to it in the `KEY_POSES` table in `script.js`.
 
 `tools/measure-pose.py` decodes PNGs with the standard library only, so it needs
 no packages. Re-running it against the current artwork reproduces the committed
@@ -169,8 +236,9 @@ Top of `style.css`:
 | --- | --- | --- |
 | `--char-height` | `45%` | character height as a share of canvas height |
 | `--floor` | `16px` | clearance under the feet |
-| `--slot-top` | `48px` | where the slot band starts |
-| `--edge` | `24px` | slot gaps, outer and inner |
+| `--slot-top` | `48px` | where the squares start |
+| `--edge` | `24px` | square gaps, outer and inner |
+| `--slot-fade` | `140ms` | how fast one image dissolves into the next |
 | `--breath` | `0.008` | idle breathing depth; set `0` for a static character |
 
 Breathing scales the character from the soles by 0.8% over a 4.2s cycle, so the
