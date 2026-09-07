@@ -19,6 +19,8 @@
 
 <main class="workspace">
 
+ <div class="deck">
+
   <div class="stage-area" id="stageArea">
    <div class="stage-holder" id="stageHolder">
     <div class="stage" id="stage">
@@ -214,6 +216,47 @@
     </section>
 
   </aside>
+
+ </div>
+
+  <section class="timeline" id="timeline">
+
+    <div class="tl-head">
+      <button class="btn btn-cap" id="capBtn" type="button">
+        <span class="cap-dot" aria-hidden="true"></span>
+        <span id="capLabel">Capture</span>
+      </button>
+      <button class="btn" id="tlClear" type="button">Clear</button>
+      <span class="tl-info" id="tlInfo">nothing captured</span>
+      <span class="tl-spacer"></span>
+      <span class="tl-sel" id="tlSel">nothing selected</span>
+      <button class="btn tl-small" id="tlBack" type="button" disabled aria-label="Move 0.1s earlier">&#8722;0.1s</button>
+      <button class="btn tl-small" id="tlFwd" type="button" disabled aria-label="Move 0.1s later">+0.1s</button>
+      <button class="btn tl-small" id="tlDel" type="button" disabled>Delete</button>
+    </div>
+
+    <div class="tl-body" id="tlBody">
+      <div class="tl-gutter">
+        <span class="tl-name tl-name-ruler"></span>
+        <span class="tl-name">Pose</span>
+        <span class="tl-name"><b>1</b> Left</span>
+        <span class="tl-name"><b>2</b> Right</span>
+      </div>
+
+      <div class="tl-grid" id="tlGrid">
+        <div class="tl-ruler" id="tlRuler"></div>
+        <div class="tl-lane" data-lane="pose"></div>
+        <div class="tl-lane" data-lane="a"></div>
+        <div class="tl-lane" data-lane="b"></div>
+        <div class="tl-playhead" id="tlPlayhead"></div>
+      </div>
+    </div>
+
+    <p class="note">Arm Capture, then Play and drive the scene: every pose and image change is
+      kept as a keyframe. Play again with Capture off to replay it. Drag a keyframe to retime it,
+      click the ruler to scrub. Record replays the track into the video.</p>
+
+  </section>
 
 </main>
 

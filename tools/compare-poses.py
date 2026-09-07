@@ -67,6 +67,13 @@ def measure(path, measure_pose):
     lo, hi = axis - BODY_HALF, axis + BODY_HALF
     head_top = next(y for y in range(height) if any(lo <= x <= hi for x in rows[y]))
 
+    # Where the character actually stands: the midpoint of the feet over the
+    # lowest rows. That is the anchor the app registers on and the one that has
+    # to agree between poses. The torso above it is free to lean.
+    low = max(head_top, bottom - 40)
+    feet = [x for y in range(low, bottom + 1) for x in rows[y]]
+    stance = (min(feet) + max(feet) + 1) / 2.0 if feet else axis
+
     return {
         "width": width,
         "height": height,
@@ -74,6 +81,7 @@ def measure(path, measure_pose):
         "ground": bottom,
         "body": bottom - head_top + 1,
         "axis": axis,
+        "stance": stance,
         "above_head": head_top - top_any,
     }
 
@@ -84,7 +92,7 @@ def main(argv):
     parser.add_argument("--tolerance", type=float, default=1.0,
                         help="allowed body height difference, percent of the master")
     parser.add_argument("--ground", type=int, default=5, help="allowed ground line difference, px")
-    parser.add_argument("--centre", type=int, default=10, help="allowed centre line difference, px")
+    parser.add_argument("--centre", type=int, default=10, help="allowed stance difference, px")
     args = parser.parse_args(argv)
 
     measure_pose = load_measure()
@@ -105,12 +113,15 @@ def main(argv):
         return 2
 
     ref = results[args.master]
-    print("master: %s  body %d px, shoes on y=%d, centre x=%d, canvas %dx%d"
-          % (args.master, ref["body"], ref["ground"], ref["axis"], ref["width"], ref["height"]))
-    print("tolerances: body within %.1f%%, ground within %d px, centre within %d px\n"
+    print("master: %s  body %d px, shoes on y=%d, stance x=%.0f, canvas %dx%d"
+          % (args.master, ref["body"], ref["ground"], ref["stance"], ref["width"], ref["height"]))
+    print("tolerances: body within %.1f%%, ground within %d px, stance within %d px"
           % (args.tolerance, args.ground, args.centre))
+    print("lean is the torso measured against the master's. It is reported, not judged:")
+    print("a pose that points or reaches is expected to carry its weight to one side.\n")
 
-    print("%-15s %7s %8s %8s %8s %9s   %s" % ("pose", "body", "scale", "ground", "centre", "aboveHead", "result"))
+    print("%-15s %7s %8s %8s %8s %7s %9s   %s"
+          % ("pose", "body", "scale", "ground", "stance", "lean", "aboveHead", "result"))
 
     failures = 0
     for pose in POSES:
@@ -119,15 +130,16 @@ def main(argv):
         d = results[pose]
         scale = 100.0 * d["body"] / ref["body"]
         d_ground = d["ground"] - ref["ground"]
-        d_axis = d["axis"] - ref["axis"]
+        d_stance = d["stance"] - ref["stance"]
+        d_lean = d["axis"] - ref["axis"]
 
         problems = []
         if abs(scale - 100.0) > args.tolerance:
             problems.append("size %+.1f%%" % (scale - 100.0))
         if abs(d_ground) > args.ground:
             problems.append("ground %+d px" % d_ground)
-        if abs(d_axis) > args.centre:
-            problems.append("centre %+d px" % d_axis)
+        if abs(d_stance) > args.centre:
+            problems.append("stance %+.0f px" % d_stance)
         if d["width"] != ref["width"] or d["height"] != ref["height"]:
             problems.append("canvas %dx%d" % (d["width"], d["height"]))
 
@@ -135,8 +147,8 @@ def main(argv):
         if problems and pose != args.master:
             failures += 1
 
-        print("%-15s %7d %7.1f%% %+8d %+8d %9d   %s"
-              % (pose, d["body"], scale, d_ground, d_axis, d["above_head"], verdict))
+        print("%-15s %7d %7.1f%% %+8d %+8.0f %+7d %9d   %s"
+              % (pose, d["body"], scale, d_ground, d_stance, d_lean, d["above_head"], verdict))
 
     print()
     if failures:

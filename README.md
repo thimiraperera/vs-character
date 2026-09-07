@@ -239,6 +239,35 @@ the page's own stylesheet and the font embedded, and the result is composited
 in. That way whatever CSS the box and the subtitle file agree on is what lands
 in the video. It is redrawn when the line changes rather than every frame.
 
+## Timeline
+
+Under the scene is a keyframe track: three lanes, one for the pose and one for
+each square.
+
+Arm **Capture**, press Play, and drive the scene. Every pose the character moves
+to and every picture a square moves to is kept as a keyframe at the moment it
+happened. Starting from the top with Capture armed begins a new take, and it
+opens with an entry per lane so the take records where it began as well as what
+changed. Without that, replaying it would leave the squares wherever the last
+take ended.
+
+Turn Capture off and Play replays the track instead. A key held down still wins,
+so a replay can be taken over at any point.
+
+To adjust: drag a keyframe along its lane to retime it, or select one and use
+the nudge buttons for a tenth of a second at a time. Delete removes the selected
+one. Clicking the ruler scrubs, which applies the track at that moment so a
+change can be checked in place.
+
+**Record** replays the track into the video, and disarms Capture first so the
+take cannot rewrite the thing it is playing. With no audio, a recording runs to
+the last keyframe rather than stopping early.
+
+The canvas works the dissolve between two pictures out from when it started
+rather than reading it back off the elements. Reading it back tied the recording
+to how far the browser had got with a CSS transition, and a window that is not
+being drawn does not advance one at all, which put blank squares in the file.
+
 ## Canvas
 
 Portrait video sizes, picked from the panel:
@@ -322,10 +351,10 @@ image squares do cross-fade, because there the dissolve is the point.
 
 ## Regenerating the artwork
 
-The five pose files were not drawn to one scale: both pointing poses are about
-6% smaller than `standing.png`, the shoes rest on rows 38 px apart across the
-set, and the body's centre line wanders by 25 px. The app hides this behind the
-per-pose constants, which is why it looks right on screen.
+The set was redrawn to one scale. Every pose now rests on the same ground line
+and stands on the same centre, so `--cx` and `--fb` are identical across all
+five and only `--fit` differs, by at most 1.5%. Before, the pointing poses were
+6% small and the shoes sat on rows 38 px apart.
 
 `pose-generation-guide.md` is written to be pasted into an image model alongside
 `standing.png`. It carries the master's exact geometry, the rules every pose

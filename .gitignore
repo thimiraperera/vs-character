@@ -2,3 +2,8 @@
 originals/
 __pycache__/
 *.pyc
+
+# Working files, kept local rather than pushed to a public repo.
+# Delete these two lines if you want them versioned.
+pose-drafts-*/
+vs-character/character.psd

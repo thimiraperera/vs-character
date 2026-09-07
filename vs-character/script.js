@@ -18,7 +18,9 @@
   var stageHolder = document.getElementById("stageHolder");
   var stageArea = document.getElementById("stageArea");
   var workspace = document.querySelector(".workspace");
+  var deck = document.querySelector(".deck");
   var controls = document.querySelector(".controls");
+  var timeline = document.getElementById("timeline");
   var castShadow = document.getElementById("castShadow");
   var resolution = document.getElementById("resolution");
   var zoom = document.getElementById("zoom");
@@ -36,6 +38,10 @@
   var held = [];
   var current = DEFAULT_POSE;
 
+  /* What the track says the pose should be at the moment being played. A key
+     under a finger still wins, so a replay can be taken over at any point. */
+  var trackPose = null;
+
   function show(pose) {
     if (pose === current) return;
     var next = poses[pose];
@@ -49,10 +55,13 @@
     /* Widen the contact shadow a touch when the stance opens up. */
     var wide = pose === "shrugging" || pose === "pointing-left" || pose === "pointing-right";
     castShadow.style.width = wide ? "48%" : "42%";
+
+    noteKeyframe("pose", pose);
   }
 
   function settle() {
-    show(held.length ? held[held.length - 1].pose : DEFAULT_POSE);
+    if (held.length) { show(held[held.length - 1].pose); return; }
+    show(trackPose || DEFAULT_POSE);
   }
 
   function press(source, pose) {
@@ -149,8 +158,9 @@
       var padY = parseFloat(box.paddingTop) + parseFloat(box.paddingBottom);
       var gap = parseFloat(box.columnGap || box.gap) || 0;
 
-      var availW = workspace.clientWidth - padX - controls.getBoundingClientRect().width - gap;
-      var availH = workspace.clientHeight - padY;
+      var rowGap = parseFloat(getComputedStyle(deck).columnGap || getComputedStyle(deck).gap) || 0;
+      var availW = workspace.clientWidth - padX - controls.getBoundingClientRect().width - rowGap;
+      var availH = workspace.clientHeight - padY - timeline.getBoundingClientRect().height - gap;
 
       k = Math.min(availW / canvasW, availH / canvasH);
       if (!(k > 0)) k = 0.05;
@@ -195,6 +205,7 @@
     var watcher = new ResizeObserver(scheduleScale);
     watcher.observe(controls);
     watcher.observe(workspace);
+    watcher.observe(timeline);
   } else {
     window.addEventListener("load", scheduleScale);
   }
@@ -209,16 +220,20 @@
      nothing is copied or uploaded anywhere. Object URLs do not survive a
      reload, which is why the panel always shows what is currently loaded. */
   var reels = {
-    a: { urls: [], layers: [], index: 0, el: null, stack: null, count: null, timer: 0 },
-    b: { urls: [], layers: [], index: 0, el: null, stack: null, count: null, timer: 0 }
+    a: { urls: [], layers: [], index: 0, el: null, stack: null, count: null, timer: 0, under: null, fadeAt: 0 },
+    b: { urls: [], layers: [], index: 0, el: null, stack: null, count: null, timer: 0, under: null, fadeAt: 0 }
   };
+
+  var SLOT_FADE = 140;
 
   function fadeMs() {
     var raw = getComputedStyle(document.documentElement).getPropertyValue("--slot-fade");
     var ms = parseFloat(raw);
-    if (!isFinite(ms)) return 140;
+    if (!isFinite(ms)) return SLOT_FADE;
     return raw.indexOf("ms") === -1 ? ms * 1000 : ms;
   }
+
+  SLOT_FADE = fadeMs();
 
   function describe(reel) {
     if (!reel.layers.length) return "none";
@@ -233,6 +248,8 @@
     reel.urls = [];
     reel.layers = [];
     reel.index = 0;
+    reel.under = null;
+    reel.fadeAt = 0;
     reel.el.classList.remove("is-filled");
     reel.count.textContent = "none";
   }
@@ -243,8 +260,10 @@
 
     var prev = reel.layers[reel.index];
     var next = reel.layers[index];
+    var moved = reel.index !== index;
     reel.index = index;
     reel.count.textContent = describe(reel);
+    if (moved) noteKeyframe(name, index);
 
     if (!next) return;
 
@@ -254,6 +273,8 @@
         reel.layers[i].classList.remove("is-front", "is-top");
       }
       next.classList.add("is-front", "is-top");
+      reel.under = null;
+      reel.fadeAt = 0;
       return;
     }
 
@@ -267,6 +288,13 @@
        same style change and there is nothing to animate from. */
     void next.offsetWidth;
     next.classList.add("is-front");
+
+    /* Noted so the canvas can work the dissolve out from the clock. Reading it
+       back off the elements would tie the recording to how far the browser has
+       got with the transition, and a window that is not being drawn does not
+       advance one at all. */
+    reel.under = prev;
+    reel.fadeAt = performance.now();
 
     if (reel.timer) clearTimeout(reel.timer);
     reel.timer = setTimeout(function () {
@@ -710,6 +738,8 @@
     elapsed = readTime();
     drawClock();
     renderCue(elapsed);
+    applyTrack(elapsed);
+    drawPlayhead();
   }
 
   function tick() {
@@ -736,6 +766,11 @@
     playBtn.setAttribute("aria-label", on ? "Pause" : "Play");
 
     if (on) {
+      /* Starting from the top with capture armed is a new take, not an
+         addition to the last one. It opens with an entry per lane so the take
+         records where it began as well as what changed. */
+      if (capturing && elapsed < 0.05) seedTake();
+
       offset = elapsed;
       startedAt = performance.now();
 
@@ -776,6 +811,9 @@
     shownCue = -1;
     setCaption("");
     drawClock();
+    trackPose = null;
+    applyTrack(0);
+    drawPlayhead();
   }
 
   playBtn.addEventListener("click", function () {
@@ -789,6 +827,277 @@
   });
 
   drawClock();
+
+  /* ---------- the keyframe track ---------- */
+
+  /* What was done, and when. One entry per change: the pose the character
+     moved to, or the picture a square moved to. Replaying is then a matter of
+     asking what the newest entry before a given moment was. */
+  var track = [];
+  var capturing = false;
+  var picked = null;
+  var seq = 0;
+
+  var capBtn = document.getElementById("capBtn");
+  var capLabel = document.getElementById("capLabel");
+  var tlInfo = document.getElementById("tlInfo");
+  var tlSel = document.getElementById("tlSel");
+  var tlGrid = document.getElementById("tlGrid");
+  var tlRuler = document.getElementById("tlRuler");
+  var tlPlayhead = document.getElementById("tlPlayhead");
+  var tlBack = document.getElementById("tlBack");
+  var tlFwd = document.getElementById("tlFwd");
+  var tlDel = document.getElementById("tlDel");
+  var lanes = {
+    pose: document.querySelector('.tl-lane[data-lane="pose"]'),
+    a: document.querySelector('.tl-lane[data-lane="a"]'),
+    b: document.querySelector('.tl-lane[data-lane="b"]')
+  };
+
+  var POSE_MARK = {
+    "standing": "\u2022",
+    "pointing-left": "\u2190",
+    "pointing-right": "\u2192",
+    "shrugging": "\u2191",
+    "arms-folded": "\u2193"
+  };
+
+  function noteKeyframe(lane, value) {
+    if (!capturing || !playing) return;
+
+    var at = Math.max(0, elapsed);
+
+    /* One entry per lane per instant, so holding a key through a stutter does
+       not pile up duplicates on the same spot. */
+    for (var i = track.length - 1; i >= 0; i--) {
+      if (track[i].lane === lane && Math.abs(track[i].t - at) < 0.02) track.splice(i, 1);
+    }
+
+    track.push({ id: ++seq, t: at, lane: lane, value: value });
+    track.sort(function (x, y) { return x.t - y.t; });
+    drawTrack();
+  }
+
+  function seedTake() {
+    track = [];
+    picked = null;
+    seq = 0;
+
+    track.push({ id: ++seq, t: 0, lane: "pose", value: current });
+    ["a", "b"].forEach(function (name) {
+      if (reels[name].layers.length) {
+        track.push({ id: ++seq, t: 0, lane: name, value: reels[name].index });
+      }
+    });
+    drawTrack();
+  }
+
+  function trackSpan() {
+    var end = 8;
+    if (haveAudio() && isFinite(audio.duration)) end = Math.max(end, audio.duration);
+    end = Math.max(end, lastCueEnd());
+    for (var i = 0; i < track.length; i++) end = Math.max(end, track[i].t + 2);
+    return end;
+  }
+
+  /* The newest entry on a lane at or before a moment, which is what that lane
+     was showing then. */
+  function valueAt(lane, time) {
+    var found = null;
+    for (var i = 0; i < track.length; i++) {
+      if (track[i].lane === lane && track[i].t <= time + 0.0005) found = track[i].value;
+      else if (track[i].t > time) break;
+    }
+    return found;
+  }
+
+  function applyTrack(time) {
+    if (capturing || !track.length) return;
+
+    var pose = valueAt("pose", time);
+    trackPose = pose || null;
+    settle();
+
+    ["a", "b"].forEach(function (name) {
+      var want = valueAt(name, time);
+      var reel = reels[name];
+      if (!reel.layers.length) return;
+      if (want === null) want = 0;
+      if (want >= reel.layers.length) want = reel.layers.length - 1;
+      if (want !== reel.index) showFrame(name, want, true);
+    });
+  }
+
+  function drawTrack() {
+    var span = trackSpan();
+
+    tlRuler.innerHTML = "";
+    var step = span > 40 ? 5 : span > 16 ? 2 : 1;
+    for (var t = 0; t <= span + 0.001; t += step) {
+      var tick = document.createElement("div");
+      tick.className = "tl-tick";
+      tick.style.left = (100 * t / span) + "%";
+      var label = document.createElement("span");
+      label.textContent = t + "s";
+      tick.appendChild(label);
+      tlRuler.appendChild(tick);
+    }
+
+    for (var key in lanes) {
+      if (Object.prototype.hasOwnProperty.call(lanes, key)) lanes[key].innerHTML = "";
+    }
+
+    for (var i = 0; i < track.length; i++) {
+      var item = track[i];
+      var lane = lanes[item.lane];
+      if (!lane) continue;
+
+      var chip = document.createElement("div");
+      chip.className = "tl-key" + (item.lane === "pose" ? " is-pose" : "");
+      if (item.lane === "pose" && item.value === DEFAULT_POSE) chip.className += " is-stand";
+      if (picked === item.id) chip.className += " is-picked";
+      chip.style.left = (100 * item.t / span) + "%";
+      chip.textContent = item.lane === "pose"
+        ? (POSE_MARK[item.value] || "?")
+        : String(item.value + 1);
+      chip.title = item.t.toFixed(2) + "s  " + item.value;
+      chip.dataset.id = item.id;
+      lane.appendChild(chip);
+    }
+
+    tlInfo.textContent = track.length
+      ? track.length + (track.length === 1 ? " keyframe" : " keyframes")
+      : "nothing captured";
+
+    drawPlayhead();
+    describePicked();
+  }
+
+  function drawPlayhead() {
+    var span = trackSpan();
+    tlPlayhead.style.left = (100 * Math.min(elapsed, span) / span) + "%";
+  }
+
+  function findKey(id) {
+    for (var i = 0; i < track.length; i++) if (track[i].id === id) return track[i];
+    return null;
+  }
+
+  function describePicked() {
+    var item = picked && findKey(picked);
+    var on = !!item;
+    tlBack.disabled = !on;
+    tlFwd.disabled = !on;
+    tlDel.disabled = !on;
+    if (!on) { tlSel.textContent = "nothing selected"; return; }
+    var where = item.lane === "pose" ? "pose" : (item.lane === "a" ? "left" : "right");
+    var what = item.lane === "pose" ? item.value : "image " + (item.value + 1);
+    tlSel.textContent = where + ", " + what + ", at " + item.t.toFixed(2) + "s";
+  }
+
+  function pick(id) {
+    picked = id;
+    drawTrack();
+  }
+
+  function nudge(by) {
+    var item = picked && findKey(picked);
+    if (!item) return;
+    item.t = Math.max(0, item.t + by);
+    track.sort(function (x, y) { return x.t - y.t; });
+    drawTrack();
+    applyTrack(elapsed);
+  }
+
+  function timeFromX(clientX) {
+    var box = tlGrid.getBoundingClientRect();
+    var span = trackSpan();
+    var at = (clientX - box.left) / box.width * span;
+    return Math.max(0, Math.min(span, at));
+  }
+
+  /* Dragging a keyframe retimes it. */
+  var dragging = null;
+
+  tlGrid.addEventListener("pointerdown", function (e) {
+    var chip = e.target.closest(".tl-key");
+    if (!chip) return;
+    e.preventDefault();
+    var id = parseInt(chip.dataset.id, 10);
+    pick(id);
+    dragging = id;
+    if (tlGrid.setPointerCapture) {
+      try { tlGrid.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+  });
+
+  tlGrid.addEventListener("pointermove", function (e) {
+    if (dragging === null) return;
+    var item = findKey(dragging);
+    if (!item) return;
+    item.t = timeFromX(e.clientX);
+    track.sort(function (x, y) { return x.t - y.t; });
+    drawTrack();
+  });
+
+  function endDrag() {
+    if (dragging === null) return;
+    dragging = null;
+    applyTrack(elapsed);
+  }
+
+  tlGrid.addEventListener("pointerup", endDrag);
+  tlGrid.addEventListener("pointercancel", endDrag);
+
+  /* Clicking the ruler scrubs, which is how a keyframe gets checked in place. */
+  tlRuler.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    scrubTo(timeFromX(e.clientX));
+  });
+
+  function scrubTo(time) {
+    setPlaying(false);
+    elapsed = time;
+    if (haveAudio()) {
+      try { audio.currentTime = Math.min(time, audio.duration || time); } catch (err) {}
+    }
+    shownCue = -1;
+    drawClock();
+    renderCue(elapsed);
+    applyTrack(elapsed);
+    drawPlayhead();
+  }
+
+  capBtn.addEventListener("click", function () {
+    capturing = !capturing;
+    capBtn.classList.toggle("is-armed", capturing);
+    capLabel.textContent = capturing ? "Capturing" : "Capture";
+    tlInfo.textContent = capturing
+      ? "armed: Play, then drive the scene"
+      : (track.length ? track.length + " keyframes" : "nothing captured");
+    capBtn.blur();
+  });
+
+  document.getElementById("tlClear").addEventListener("click", function () {
+    track = [];
+    picked = null;
+    trackPose = null;
+    drawTrack();
+  });
+
+  tlBack.addEventListener("click", function () { nudge(-0.1); });
+  tlFwd.addEventListener("click", function () { nudge(0.1); });
+
+  tlDel.addEventListener("click", function () {
+    for (var i = 0; i < track.length; i++) {
+      if (track[i].id === picked) { track.splice(i, 1); break; }
+    }
+    picked = null;
+    drawTrack();
+    applyTrack(elapsed);
+  });
+
+  drawTrack();
 
   /* ---------- drawing the scene onto a canvas ---------- */
 
@@ -881,25 +1190,27 @@
       brush.fill();
       brush.restore();
 
-      /* At most two layers are ever lit, and the one marked top paints over the
-         other, so the frame matches what the page is showing mid-fade. */
-      var lit = el.querySelectorAll(".slot-img.is-front");
-      if (el.classList.contains("is-filled") && lit.length) {
+      /* The same dissolve the page is showing, worked out from when it began
+         rather than read back off the elements: the one going out underneath at
+         full strength, the one arriving over it. */
+      var reel = reels[el.dataset.slot];
+      var arriving = reel && reel.layers.length ? reel.layers[reel.index] : null;
+
+      if (arriving && arriving.naturalWidth) {
+        var mix = reel.fadeAt ? (performance.now() - reel.fadeAt) / SLOT_FADE : 1;
+        if (!(mix >= 0)) mix = 1;
+        if (mix > 1) mix = 1;
+
         brush.save();
         roundedPath(b.x, b.y, b.w, b.h, radius);
         brush.clip();
-        for (var pass = 0; pass < 2; pass++) {
-          for (var n = 0; n < lit.length; n++) {
-            var layer = lit[n];
-            var onTop = layer.classList.contains("is-top");
-            if ((pass === 0) === onTop) continue;
-            if (!layer.naturalWidth) continue;
-            var alpha = parseFloat(getComputedStyle(layer).opacity);
-            if (!(alpha > 0.004)) continue;
-            brush.globalAlpha = alpha;
-            drawCover(layer, b.x, b.y, b.w, b.h);
-          }
+
+        if (mix < 1 && reel.under && reel.under !== arriving && reel.under.naturalWidth) {
+          drawCover(reel.under, b.x, b.y, b.w, b.h);
         }
+
+        brush.globalAlpha = mix;
+        drawCover(arriving, b.x, b.y, b.w, b.h);
         brush.globalAlpha = 1;
         brush.restore();
       }
@@ -1090,7 +1401,12 @@
      track, or with the last subtitle line when there is no track. */
   function runLength() {
     if (haveAudio()) return isFinite(audio.duration) ? audio.duration : 0;
-    return lastCueEnd();
+
+    /* Without a track to follow, the subtitles say how long it runs. With one,
+       it has to last at least until the final keyframe has had its moment. */
+    var end = lastCueEnd();
+    for (var i = 0; i < track.length; i++) end = Math.max(end, track[i].t);
+    return end;
   }
 
   function startRun() {
@@ -1169,6 +1485,14 @@
       recInfo.textContent = "getting the caption ready";
       setTimeout(startRecording, 120);
       return;
+    }
+
+    /* A take plays the track back. Leaving capture armed would rewrite it from
+       whatever happens during the take instead. */
+    if (capturing) {
+      capturing = false;
+      capBtn.classList.remove("is-armed");
+      capLabel.textContent = "Capture";
     }
 
     if (saveUrl) { URL.revokeObjectURL(saveUrl); saveUrl = ""; }
