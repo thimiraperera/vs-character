@@ -337,6 +337,24 @@ image squares do cross-fade, because there the dissolve is the point.
 no packages. Re-running it against the current artwork reproduces the committed
 values exactly.
 
+## One shared scope
+
+`vs-character/script.js` is a single IIFE, so everything declared at its top
+level shares one scope. Declaring a name twice there is legal and silently
+discards the first, which breaks something far from the edit. It has happened
+twice: a canvas context named `paint` replaced the function that draws the image
+squares and stopped images loading, and a `show` for the squares replaced the
+`show` for the character and stopped every arrow key.
+
+After editing the script:
+
+```bash
+python tools/check-script.py
+```
+
+It lists any name taken more than once and exits non-zero. No build step, no
+packages.
+
 ## Metadata in the artwork (read before posting)
 
 The PNGs carry metadata that has nothing to do with the pixels:

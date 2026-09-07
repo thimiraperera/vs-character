@@ -237,7 +237,7 @@
     reel.count.textContent = "none";
   }
 
-  function show(name, index, animate) {
+  function showFrame(name, index, animate) {
     var reel = reels[name];
     if (!reel.layers.length) return;
 
@@ -280,7 +280,7 @@
   function advance(name) {
     var reel = reels[name];
     if (reel.layers.length < 2) return;
-    show(name, (reel.index + 1) % reel.layers.length, true);
+    showFrame(name, (reel.index + 1) % reel.layers.length, true);
   }
 
   function loadImages(name, files) {
@@ -351,7 +351,7 @@
     }
 
     Promise.all(jobs).then(function () {
-      show(name, startedEmpty ? 0 : reel.index, false);
+      showFrame(name, startedEmpty ? 0 : reel.index, false);
     });
   }
 
