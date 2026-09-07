@@ -54,7 +54,7 @@ body{
 
 .workspace{
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: center;
   gap: 40px;
   height: 100%;
@@ -62,23 +62,19 @@ body{
   overflow: hidden;
 }
 
-/* Fills whatever the controls leave behind, so the fit scale is measured
-   rather than guessed from the panel width. */
+/* Only as big as the canvas inside it, so the canvas and the panels sit
+   together as one centred block instead of drifting apart. */
 .stage-area{
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
   min-height: 0;
+  max-width: 100%;
+  max-height: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
   overflow: hidden;
 }
 
-.stage-area.is-zoomed{
-  overflow: auto;
-  align-items: flex-start;
-  justify-content: flex-start;
-}
+.stage-area.is-zoomed{ overflow: auto; }
 
 .stage-holder{
   position: relative;
@@ -292,22 +288,25 @@ body{
 
 /* ---------- side controls, outside the canvas ---------- */
 
+/* Column wrap rather than a scrollbar: panels fill the height available and
+   start a new column when they run out of it.
+
+   The height has to be a real one rather than a max, and it has to come from
+   the workspace rather than from the row it shares with the canvas. Sizing it
+   against its own row makes how many columns it wraps into depend on how big
+   the canvas is, while the canvas is sized from how wide this ends up: the two
+   chase each other down to nothing. */
 .controls{
-  flex: 0 0 288px;
+  flex: 0 0 auto;
   align-self: stretch;
   display: flex;
-  flex-direction: column;
+  flex-flow: column wrap;
+  align-content: flex-start;
+  justify-content: center;
   gap: 14px;
-  overflow-y: auto;
-  padding-right: 4px;
 }
 
-.controls::-webkit-scrollbar{ width: 10px; }
-.controls::-webkit-scrollbar-thumb{
-  border: 3px solid #0d1017;
-  border-radius: 6px;
-  background: #2b3342;
-}
+.panel{ width: 264px; }
 
 .panel{
   padding: 18px;
@@ -417,8 +416,12 @@ body{
 }
 
 /* Last in the file on purpose: these override .workspace and .too-small, and a
-   media query carries no extra specificity to win on. */
-@media (max-width: 900px), (max-height: 560px){
+   media query carries no extra specificity to win on.
+
+   The cut-off is where the panels stop leaving the canvas a usable amount of
+   room: below it they wrap into a fourth column and squeeze the canvas down to
+   nothing. */
+@media (max-width: 1080px), (max-height: 660px){
   .workspace{ display: none; }
   .too-small{ display: flex; }
 }
@@ -545,3 +548,77 @@ body{
 .field-css textarea:focus-visible{ outline: 2px solid #2f7fd8; outline-offset: 1px; }
 
 .note.is-bad{ color: #e0745f; }
+
+/* ---------- add-images badge on each square ---------- */
+
+.slot-add{
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(15,22,38,.55);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s ease, background .15s ease;
+}
+
+.slot-add svg{
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.slot:hover .slot-add{ opacity: 1; }
+.slot-add:hover{ background: rgba(15,22,38,.8); }
+.slot-add:focus-visible{ opacity: 1; outline: 2px solid #2f7fd8; outline-offset: 2px; }
+
+/* ---------- key legend ---------- */
+
+.keys{
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.keys li{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #8b96a8;
+}
+
+.kbds{
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.keys kbd{
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 6px;
+  background: #1e2531;
+  color: #cdd6e4;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+}

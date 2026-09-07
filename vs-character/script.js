@@ -17,8 +17,9 @@
   var stage = document.getElementById("stage");
   var stageHolder = document.getElementById("stageHolder");
   var stageArea = document.getElementById("stageArea");
+  var workspace = document.querySelector(".workspace");
+  var controls = document.querySelector(".controls");
   var castShadow = document.getElementById("castShadow");
-  var pad = document.querySelector(".pad");
   var resolution = document.getElementById("resolution");
   var zoom = document.getElementById("zoom");
   var scaleNote = document.getElementById("scaleNote");
@@ -34,10 +35,6 @@
      which pose wins: the most recent one shows. */
   var held = [];
   var current = DEFAULT_POSE;
-
-  /* The pad button currently held down with Space or Enter, if any. Only one
-     element can hold focus, so there is never more than one. */
-  var keyButton = null;
 
   function show(pose) {
     if (pose === current) return;
@@ -75,10 +72,7 @@
 
   function releaseAll() {
     held.length = 0;
-    keyButton = null;
     settle();
-    var down = pad.querySelectorAll(".key.is-down");
-    for (var i = 0; i < down.length; i++) down[i].classList.remove("is-down");
   }
 
   /* ---------- keyboard ---------- */
@@ -116,9 +110,6 @@
     if (e.repeat) return;
 
     press("key:" + e.key, pose);
-
-    var button = pad.querySelector('.key[data-pose="' + pose + '"]');
-    if (button) button.classList.add("is-down");
   });
 
   window.addEventListener("keyup", function (e) {
@@ -127,9 +118,6 @@
     if (!pose) return;
     e.preventDefault();
     release("key:" + e.key);
-
-    var button = pad.querySelector('.key[data-pose="' + pose + '"]');
-    if (button) button.classList.remove("is-down");
   });
 
   /* A key held while the tab or window loses focus never delivers its keyup,
@@ -137,72 +125,6 @@
   window.addEventListener("blur", releaseAll);
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) releaseAll();
-  });
-
-  /* ---------- on-screen pad ---------- */
-
-  pad.addEventListener("pointerdown", function (e) {
-    var button = e.target.closest(".key");
-    if (!button) return;
-
-    /* A right or middle press should open nothing and pose nothing. */
-    if (e.button !== 0 || e.isPrimary === false) return;
-    e.preventDefault();
-
-    if (button.setPointerCapture) {
-      try { button.setPointerCapture(e.pointerId); } catch (err) {}
-    }
-    button.classList.add("is-down");
-    press("pointer:" + e.pointerId, button.dataset.pose);
-  });
-
-  function liftPointer(e) {
-    var button = e.target.closest ? e.target.closest(".key") : null;
-    if (button) button.classList.remove("is-down");
-    release("pointer:" + e.pointerId);
-  }
-
-  pad.addEventListener("pointerup", liftPointer);
-  pad.addEventListener("pointercancel", liftPointer);
-
-  /* Safety net for the release that never reaches the pad: capture can be
-     refused, and a pointer can lift outside the button it started on. */
-  window.addEventListener("pointerup", function (e) {
-    release("pointer:" + e.pointerId);
-  });
-  window.addEventListener("pointercancel", function (e) {
-    release("pointer:" + e.pointerId);
-  });
-
-  pad.addEventListener("contextmenu", function (e) { e.preventDefault(); });
-  pad.addEventListener("click", function (e) { e.preventDefault(); });
-
-  /* Space is the play toggle now, so a focused pad button answers to Enter. */
-  pad.addEventListener("keydown", function (e) {
-    var button = e.target.closest(".key");
-    if (!button || e.key !== "Enter" || e.repeat) return;
-    e.preventDefault();
-    if (keyButton) keyButton.classList.remove("is-down");
-    keyButton = button;
-    button.classList.add("is-down");
-    press("btn", button.dataset.pose);
-  });
-
-  /* Watched on the window, and matched to the button that started the hold:
-     the key can be let go after focus has already moved elsewhere, and that
-     keyup would never reach the pad. */
-  window.addEventListener("keyup", function (e) {
-    if (!keyButton || e.key !== "Enter") return;
-    keyButton.classList.remove("is-down");
-    keyButton = null;
-    release("btn");
-  });
-
-  pad.addEventListener("focusout", function () {
-    if (!keyButton) return;
-    keyButton.classList.remove("is-down");
-    keyButton = null;
-    release("btn");
   });
 
   /* ---------- canvas size and viewing scale ---------- */
@@ -217,8 +139,20 @@
     stageArea.classList.toggle("is-zoomed", mode !== "fit");
 
     if (mode === "fit") {
-      k = Math.min(stageArea.clientWidth / canvasW, stageArea.clientHeight / canvasH);
-      if (!(k > 0)) k = 0.1;
+      /* The panels wrap into however many columns the height needs, so how
+         wide they end up is only known once they are laid out. Measure that
+         and give the canvas what is left, otherwise a narrow window pushes
+         the far column off the edge. */
+      var box = getComputedStyle(workspace);
+      var padX = parseFloat(box.paddingLeft) + parseFloat(box.paddingRight);
+      var padY = parseFloat(box.paddingTop) + parseFloat(box.paddingBottom);
+      var gap = parseFloat(box.columnGap || box.gap) || 0;
+
+      var availW = workspace.clientWidth - padX - controls.getBoundingClientRect().width - gap;
+      var availH = workspace.clientHeight - padY;
+
+      k = Math.min(availW / canvasW, availH / canvasH);
+      if (!(k > 0)) k = 0.05;
       if (k > 1) k = 1;
     } else {
       k = parseFloat(mode);
@@ -239,11 +173,32 @@
     applyScale();
   }
 
+  /* Resizing the window moves two things at once: the room available, and how
+     many columns the panels wrap into. Measuring in the middle of that reads
+     one of them stale, so the work is put off until the layout has settled. */
+  var scalePending = 0;
+  function scheduleScale() {
+    if (scalePending) return;
+    scalePending = setTimeout(function () {
+      scalePending = 0;
+      applyScale();
+    }, 0);
+  }
+
   resolution.addEventListener("change", applyResolution);
   zoom.addEventListener("change", applyScale);
-  window.addEventListener("resize", applyScale);
+  window.addEventListener("resize", scheduleScale);
+
+  if (window.ResizeObserver) {
+    var watcher = new ResizeObserver(scheduleScale);
+    watcher.observe(controls);
+    watcher.observe(workspace);
+  } else {
+    window.addEventListener("load", scheduleScale);
+  }
 
   applyResolution();
+  scheduleScale();
 
   /* ---------- image slots ---------- */
 
@@ -323,7 +278,7 @@
       return x.name.localeCompare(y.name, undefined, { numeric: true, sensitivity: "base" });
     });
 
-    releaseUrls(reel);
+    var startedEmpty = reel.urls.length === 0;
     for (var j = 0; j < picked.length; j++) reel.urls.push(URL.createObjectURL(picked[j]));
 
     /* Decode everything up front so a click never waits on the disk. */
@@ -333,7 +288,9 @@
       if (warm.decode) warm.decode().catch(function () {});
     }
 
-    reel.index = 0;
+    /* Adding to a reel that already has something showing should not yank the
+       picture out from under you, so only a first load jumps to the front. */
+    if (startedEmpty) reel.index = 0;
     paint(name, true);
   }
 
@@ -348,9 +305,15 @@
     reel.back = layers[1];
     reel.count = document.getElementById("count" + name.toUpperCase());
 
-    box.addEventListener("click", function () {
+    box.addEventListener("click", function (e) {
+      if (e.target.closest(".slot-add")) return;
       if (reel.urls.length) advance(name);
       else input.click();
+    });
+
+    box.querySelector(".slot-add").addEventListener("click", function (e) {
+      e.stopPropagation();
+      input.click();
     });
 
     input.addEventListener("change", function () {
@@ -358,9 +321,10 @@
       input.value = "";
     });
 
-    document.querySelector('[data-pick="' + name + '"]').addEventListener("click", function () {
-      input.click();
-    });
+    var pickers = document.querySelectorAll('.controls [data-pick="' + name + '"]');
+    for (var q = 0; q < pickers.length; q++) {
+      pickers[q].addEventListener("click", function () { input.click(); });
+    }
 
     document.querySelector('[data-clear="' + name + '"]').addEventListener("click", function () {
       releaseUrls(reel);
@@ -545,11 +509,68 @@
   cssBox.addEventListener("input", applyCss);
   applyCss();
 
+  /* ---------- audio ---------- */
+
+  /* Read off the disk like the images, and never uploaded. When a track is
+     loaded it becomes the clock: the subtitles read its currentTime rather
+     than a timer of our own, so the two cannot drift apart. */
+  var audio = document.getElementById("audio");
+  var audioInfo = document.getElementById("audioInfo");
+  var audioFile = document.getElementById("fileAudio");
+  var audioUrl = "";
+
+  function haveAudio() { return audioUrl !== ""; }
+
+  function dropAudio() {
+    if (!audioUrl) return;
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+    URL.revokeObjectURL(audioUrl);
+    audioUrl = "";
+    audioInfo.textContent = "none";
+  }
+
+  audioFile.addEventListener("change", function () {
+    var file = audioFile.files && audioFile.files[0];
+    audioFile.value = "";
+    if (!file) return;
+
+    setPlaying(false);
+    dropAudio();
+    audioUrl = URL.createObjectURL(file);
+    audio.src = audioUrl;
+    audioInfo.textContent = file.name;
+    elapsed = 0;
+    drawClock();
+  });
+
+  audio.addEventListener("loadedmetadata", function () {
+    if (isFinite(audio.duration)) {
+      audioInfo.textContent = audioInfo.textContent.split("  ")[0] + "  " + stamp(audio.duration);
+    }
+  });
+
+  audio.addEventListener("error", function () {
+    if (audioUrl) audioInfo.textContent = "that file would not play";
+  });
+
+  audio.addEventListener("ended", function () { setPlaying(false); });
+
+  document.getElementById("pickAudio").addEventListener("click", function () { audioFile.click(); });
+  document.getElementById("clearAudio").addEventListener("click", function () {
+    setPlaying(false);
+    dropAudio();
+    resetClock();
+  });
+
   /* ---------- playback clock ---------- */
 
   var playing = false;
   var elapsed = 0;
-  var lastTick = 0;
+  var startedAt = 0;
+  var offset = 0;
+  var ticker = 0;
   var playBtn = document.getElementById("playBtn");
   var playLabel = document.getElementById("playLabel");
   var clock = document.getElementById("clock");
@@ -561,26 +582,69 @@
     return m + ":" + (sec < 10 ? "0" : "") + sec.toFixed(1);
   }
 
+  /* A loaded track is the clock. Without one, count from when Play was pressed
+     rather than adding up frames, so a stall cannot lose time. */
+  function readTime() {
+    if (haveAudio()) return audio.currentTime;
+    if (!playing) return elapsed;
+    return offset + (performance.now() - startedAt) / 1000;
+  }
+
   function drawClock() { clock.textContent = stamp(elapsed); }
 
-  function tick(now) {
-    if (!playing) return;
-    elapsed += (now - lastTick) / 1000;
-    lastTick = now;
+  function sync() {
+    elapsed = readTime();
     drawClock();
     renderCue(elapsed);
+  }
+
+  function tick() {
+    if (!playing) return;
+    sync();
     requestAnimationFrame(tick);
   }
 
+  /* A hidden tab is handed no animation frames, so on its own the caption
+     would freeze while the track played on. Both of these keep it moving. */
+  audio.addEventListener("timeupdate", function () {
+    if (playing && haveAudio()) sync();
+  });
+
   function setPlaying(on) {
     if (playing === on) return;
+
+    /* Read the time while it is still running, or the value is already stale. */
+    if (!on) elapsed = readTime();
+
     playing = on;
     playBtn.classList.toggle("is-playing", on);
     playLabel.textContent = on ? "Pause" : "Play";
     playBtn.setAttribute("aria-label", on ? "Pause" : "Play");
+
     if (on) {
-      lastTick = performance.now();
+      offset = elapsed;
+      startedAt = performance.now();
+
+      if (haveAudio()) {
+        var started = audio.play();
+
+        /* If the browser refuses to start the track, the clock would sit at
+           zero for ever, since it is the track's own currentTime. Stop, and
+           say why. */
+        if (started && started.catch) {
+          started.catch(function () {
+            audioInfo.textContent = "the browser blocked playback, press Play again";
+            setPlaying(false);
+          });
+        }
+      }
+
       requestAnimationFrame(tick);
+      ticker = setInterval(sync, 250);
+    } else {
+      if (ticker) { clearInterval(ticker); ticker = 0; }
+      if (haveAudio()) audio.pause();
+      drawClock();
     }
   }
 
@@ -588,6 +652,7 @@
 
   function resetClock() {
     setPlaying(false);
+    if (haveAudio()) audio.currentTime = 0;
     elapsed = 0;
     shownCue = -1;
     setCaption("");

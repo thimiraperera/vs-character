@@ -33,6 +33,7 @@ Then open <http://localhost:8123/vs-character/>.
 | `2` | next image in the right square |
 | `Space` | play / pause |
 
+Poses are keyboard only, so nothing about the character sits in the panels.
 Clicking a square does the same as its number key. Holding two arrows at once
 shows the most recent and falls back to the one still held when you let go, and
 a key held while the window loses focus resets rather than sticking.
@@ -41,10 +42,12 @@ Keys are ignored while you are typing in the CSS box.
 
 ## Images
 
-Load as many as you like into either square, from the panel or by dropping them
-on the square. They are sorted by filename, so `01.jpg, 02.jpg, 10.jpg` land in
-the order you expect. Each press steps to the next one and wraps around at the
-end, with a fast dissolve between them.
+Load as many as you like into either square: the arrow badge in its corner, the
+panel button, or by dropping files on it. Picking more adds to what is already
+there rather than replacing it, and the picture on screen stays put while they
+arrive. They are sorted by filename, so `01.jpg, 02.jpg, 10.jpg` land in the
+order you expect. Each press steps to the next one and wraps around at the end,
+with a fast dissolve between them.
 
 Nothing is uploaded. Each file is referenced straight off your disk through an
 object URL, so the count of images is limited only by the machine, and none of
@@ -55,14 +58,24 @@ always shows what is currently loaded.
 Every image is decoded up front, so stepping through them never waits on the
 disk mid-recording.
 
+## Audio
+
+Load an `.mp3`, `.wav`, or anything else the browser plays. Like the images it
+is read straight off the disk and never uploaded.
+
+With a track loaded it becomes the clock: Play starts the audio and the
+subtitles read its `currentTime` rather than a timer of their own, so the two
+cannot drift apart. Pause stops both, and reset returns both to zero. Without a
+track, Play runs a plain clock and the subtitles follow that instead.
+
 ## Subtitles
 
 Load a `.srt` or `.vtt` file from the panel. It is read in the browser and never
 leaves the machine.
 
-Press Space to start the clock and the lines appear on their own timings. Space
-again pauses, and the reset button returns to zero. Pausing keeps the current
-line on screen, which is handy while framing a shot.
+Press Space to start and the lines appear on their own timings. Space again
+pauses, and the reset button returns to zero. Pausing keeps the current line on
+screen, which is handy while framing a shot.
 
 Both formats are handled, including `HH:MM:SS,mmm` and `MM:SS.mmm` stamps and
 VTT cue settings after the end stamp. These tags survive into the caption:
@@ -143,8 +156,13 @@ what you see; it never changes the composition. Set it to 100% to capture at
 native resolution.
 
 The layout is fixed rather than responsive, because the output size has to stay
-predictable. Below 900px wide (or 560px tall) the page shows a short note
-instead of the scene.
+predictable. The canvas and its panels sit together as one centred block. The
+panels wrap into as many columns as the window height needs, so they never
+scroll, and the canvas takes whatever width they leave over.
+
+Below 1080px wide (or 660px tall) the page shows a short note instead. That is
+the point where the panels need a fourth column and there is no useful room
+left for the canvas.
 
 All the controls sit outside the canvas, so only the scene is inside the
 recording area.

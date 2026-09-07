@@ -13,8 +13,8 @@
     <rect x="6" y="2.5" width="12" height="19" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
     <path d="M10.5 18.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
   </svg>
-  <h1>Open this on a desktop</h1>
-  <p>The scene is built at a fixed portrait video size and driven from the keyboard, so it needs a larger screen.</p>
+  <h1>The window is too small</h1>
+  <p>The scene is built at a fixed portrait video size and sits beside its panels, so it needs a window of at least 1080 by 660.</p>
 </div>
 
 <main class="workspace">
@@ -36,6 +36,11 @@
               <path d="M12 6v12M6 12h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
             </svg>
           </div>
+          <button class="slot-add" type="button" data-pick="a" aria-label="Add images to the left square">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M4.5 15v3.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V15"/>
+            </svg>
+          </button>
         </div>
 
         <div class="slot" data-slot="b" title="Click for the next image">
@@ -46,6 +51,11 @@
               <path d="M12 6v12M6 12h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
             </svg>
           </div>
+          <button class="slot-add" type="button" data-pick="b" aria-label="Add images to the right square">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 16V4m0 0-4.5 4.5M12 4l4.5 4.5M4.5 15v3.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V15"/>
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -70,25 +80,6 @@
   <aside class="controls">
 
     <section class="panel">
-      <h2>Pose</h2>
-      <div class="pad">
-        <button class="key key-up" type="button" data-pose="shrugging" aria-label="Shrug">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0-6 6m6-6 6 6"/></svg>
-        </button>
-        <button class="key key-left" type="button" data-pose="pointing-left" aria-label="Point left">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m0 0 6-6m-6 6 6 6"/></svg>
-        </button>
-        <button class="key key-right" type="button" data-pose="pointing-right" aria-label="Point right">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m0 0-6-6m6 6-6 6"/></svg>
-        </button>
-        <button class="key key-down" type="button" data-pose="arms-folded" aria-label="Fold arms">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m0 0 6-6m-6 6-6-6"/></svg>
-        </button>
-      </div>
-      <p class="note">Hold an arrow key. Let go to stand.</p>
-    </section>
-
-    <section class="panel">
       <h2>Playback</h2>
       <div class="transport">
         <button class="btn btn-play" id="playBtn" type="button" aria-label="Play">
@@ -96,12 +87,24 @@
           <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5.5v13M15 5.5v13"/></svg>
           <span id="playLabel">Play</span>
         </button>
-        <button class="btn btn-ghost" id="resetBtn" type="button" aria-label="Back to start">
+        <button class="btn" id="resetBtn" type="button" aria-label="Back to start">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6v12M18.5 6.5v11a.6.6 0 0 1-.95.48L10 12l7.55-5.98a.6.6 0 0 1 .95.48z"/></svg>
         </button>
       </div>
       <p class="clock" id="clock">0:00.0</p>
-      <p class="note">Space plays and pauses.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Audio</h2>
+      <div class="row-actions">
+        <button class="btn btn-wide" id="pickAudio" type="button">Choose an audio file</button>
+        <button class="btn" id="clearAudio" type="button" aria-label="Clear audio">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+        </button>
+      </div>
+      <p class="row-count" id="audioInfo">none</p>
+      <input id="fileAudio" type="file" accept="audio/*" hidden>
+      <p class="note">Play runs the audio, and the subtitles follow its clock.</p>
     </section>
 
     <section class="panel">
@@ -113,8 +116,8 @@
         <span class="row-count" id="countA">none</span>
       </div>
       <div class="row-actions">
-        <button class="btn btn-ghost btn-wide" type="button" data-pick="a">Choose images</button>
-        <button class="btn btn-ghost" type="button" data-clear="a" aria-label="Clear left images">
+        <button class="btn btn-wide" type="button" data-pick="a">Add images</button>
+        <button class="btn" type="button" data-clear="a" aria-label="Clear left images">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
         </button>
       </div>
@@ -125,23 +128,23 @@
         <span class="row-count" id="countB">none</span>
       </div>
       <div class="row-actions">
-        <button class="btn btn-ghost btn-wide" type="button" data-pick="b">Choose images</button>
-        <button class="btn btn-ghost" type="button" data-clear="b" aria-label="Clear right images">
+        <button class="btn btn-wide" type="button" data-pick="b">Add images</button>
+        <button class="btn" type="button" data-clear="b" aria-label="Clear right images">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
         </button>
       </div>
 
-      <p class="note">Click a square, or press 1 and 2, for the next image. Files stay on your computer.</p>
+      <p class="note">Click a square for the next image, or the arrow badge on it to add more.</p>
 
-      <input class="hidden-file" id="fileA" type="file" accept="image/*" multiple hidden>
-      <input class="hidden-file" id="fileB" type="file" accept="image/*" multiple hidden>
+      <input id="fileA" type="file" accept="image/*" multiple hidden>
+      <input id="fileB" type="file" accept="image/*" multiple hidden>
     </section>
 
     <section class="panel">
       <h2>Subtitles</h2>
       <div class="row-actions">
-        <button class="btn btn-ghost btn-wide" id="pickSubs" type="button">Choose .srt or .vtt</button>
-        <button class="btn btn-ghost" id="clearSubs" type="button" aria-label="Clear subtitles">
+        <button class="btn btn-wide" id="pickSubs" type="button">Choose .srt or .vtt</button>
+        <button class="btn" id="clearSubs" type="button" aria-label="Clear subtitles">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
         </button>
       </div>
@@ -150,7 +153,7 @@
 
       <label class="field field-css">
         <span>Subtitle CSS</span>
-        <textarea id="subsCss" spellcheck="false" rows="10"></textarea>
+        <textarea id="subsCss" spellcheck="false" rows="9"></textarea>
       </label>
       <p class="note" id="cssNote">Edits apply as you type.</p>
     </section>
@@ -178,9 +181,29 @@
       <p class="note" id="scaleNote"></p>
     </section>
 
+    <section class="panel">
+      <h2>Keys</h2>
+      <ul class="keys">
+        <li>
+          <span class="kbds"><kbd>&#8592;</kbd><kbd>&#8594;</kbd><kbd>&#8593;</kbd><kbd>&#8595;</kbd></span>
+          <span>hold to pose</span>
+        </li>
+        <li>
+          <span class="kbds"><kbd>1</kbd><kbd>2</kbd></span>
+          <span>next image</span>
+        </li>
+        <li>
+          <span class="kbds"><kbd>Space</kbd></span>
+          <span>play, pause</span>
+        </li>
+      </ul>
+    </section>
+
   </aside>
 
 </main>
+
+<audio id="audio" preload="auto"></audio>
 
 <script src="script.js"></script>
 </body>
