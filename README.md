@@ -320,6 +320,26 @@ Poses cut rather than cross-fade. Dissolving two bodies that stand in slightly
 different places reads as a double exposure instead of one character moving. The
 image squares do cross-fade, because there the dissolve is the point.
 
+## Regenerating the artwork
+
+The five pose files were not drawn to one scale: both pointing poses are about
+6% smaller than `standing.png`, the shoes rest on rows 38 px apart across the
+set, and the body's centre line wanders by 25 px. The app hides this behind the
+per-pose constants, which is why it looks right on screen.
+
+`pose-generation-guide.md` is written to be pasted into an image model alongside
+`standing.png`. It carries the master's exact geometry, the rules every pose
+must meet, a brief for each pose, and the one decision to make first: the
+master leaves 15 px above the head, so a hand raised above it cannot fit
+without either lowering the gesture or re-cutting the master with headroom.
+
+```bash
+python tools/compare-poses.py
+```
+
+measures every pose against the master and passes or fails each on body height,
+ground line and centre line, so results are judged by numbers rather than eye.
+
 ## Adding a pose
 
 1. Drop `vs-character/<name>/<name>.png` in place (8-bit RGBA).
