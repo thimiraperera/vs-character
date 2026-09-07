@@ -1,0 +1,376 @@
+:root{
+  /* Canvas size in real output pixels. Set from the resolution picker. */
+  --w: 1080;
+  --h: 1920;
+
+  /* Character height as a share of the canvas height. */
+  --char-height: 45%;
+
+  /* Space left under the feet. */
+  --floor: 16px;
+
+  /* Slot band at the top. */
+  --edge: 24px;
+  --slot-top: 48px;
+
+  /* Idle breathing depth. Set to 0 for a perfectly static character. */
+  --breath: 0.008;
+
+  --ink: #17203a;
+}
+
+*{ box-sizing: border-box; }
+
+html, body{ height: 100%; margin: 0; }
+
+body{
+  background: #0d1017;
+  color: #e7ecf4;
+  font-family: "Segoe UI", Roboto, -apple-system, system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- small screens get a note instead of the scene ---------- */
+
+.too-small{
+  display: none;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px;
+  text-align: center;
+}
+
+.too-small svg{ width: 44px; height: 44px; color: #7d8aa0; }
+.too-small h1{ margin: 0; font-size: 19px; font-weight: 650; }
+.too-small p{ margin: 0; max-width: 30ch; color: #8b96a8; font-size: 14px; line-height: 1.55; }
+
+/* ---------- workspace ---------- */
+
+.workspace{
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 40px;
+  height: 100%;
+  padding: 32px;
+  overflow: hidden;
+}
+
+/* Fills whatever the controls leave behind, so the fit scale is measured
+   rather than guessed from the panel width. */
+.stage-area{
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.stage-area.is-zoomed{
+  overflow: auto;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.stage-holder{
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* The canvas itself: exact output pixels, scaled only for viewing. */
+.stage{
+  position: relative;
+  width: calc(var(--w) * 1px);
+  height: calc(var(--h) * 1px);
+  overflow: hidden;
+  transform-origin: 0 0;
+  isolation: isolate;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ---------- backdrop ---------- */
+
+.sky{
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, #cfe9ff 0%, #e6f1fb 42%, #fdf3e6 100%);
+}
+
+.glow{
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  width: 132%;
+  aspect-ratio: 1;
+  transform: translateX(-50%);
+  background: radial-gradient(circle at 50% 50%,
+              rgba(255,236,196,.95) 0%,
+              rgba(255,236,196,.45) 38%,
+              rgba(255,236,196,0) 68%);
+}
+
+.floor{
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 26%;
+  background: linear-gradient(180deg, rgba(126,150,178,0) 0%, rgba(126,150,178,.16) 60%, rgba(96,120,150,.26) 100%);
+}
+
+/* ---------- the two comparison slots ---------- */
+
+.slots{
+  position: absolute;
+  top: var(--slot-top);
+  left: var(--edge);
+  right: var(--edge);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--edge);
+}
+
+.slot{
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255,255,255,.55);
+  box-shadow: 0 0 0 1px rgba(23,32,58,.10), 0 10px 26px rgba(30,45,70,.10);
+  cursor: pointer;
+}
+
+.slot.is-over{ box-shadow: 0 0 0 3px #2f7fd8, 0 10px 26px rgba(30,45,70,.16); }
+
+.slot-img{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+}
+
+.slot.is-filled .slot-img{ display: block; }
+.slot.is-filled{ background: none; }
+.slot.is-filled .slot-empty{ display: none; }
+
+.slot-empty{
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(23,32,58,.30);
+}
+
+.slot-empty svg{ width: 12%; height: 12%; }
+
+.slot-clear{
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  display: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(15,22,38,.55);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+
+.slot-clear svg{ width: 18px; height: 18px; }
+.slot.is-filled .slot-clear{ display: grid; }
+.slot.is-filled:hover .slot-clear{ opacity: 1; }
+
+/* ---------- character ---------- */
+
+.cast-shadow{
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--floor) - 12px);
+  width: 42%;
+  height: 3.6%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(40,55,80,.42) 0%, rgba(40,55,80,.20) 45%, rgba(40,55,80,0) 72%);
+  transition: width .18s ease;
+}
+
+.character{
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+  animation: breathe 4.2s ease-in-out infinite;
+}
+
+@keyframes breathe{
+  0%, 100% { transform: scaleY(1); }
+  50%      { transform: scaleY(calc(1 + var(--breath))); }
+}
+
+.pose{
+  position: absolute;
+  left: 50%;
+  bottom: var(--floor);
+
+  /* Scale so the head-to-toe span is exactly --char-height of the canvas. */
+  height: calc(var(--char-height) / var(--fit));
+  width: auto;
+
+  /* Register the artwork by its feet: horizontally on the stance centre,
+     vertically on the sole line. */
+  transform: translate(calc(var(--cx) * -100%), calc(var(--fb) * 100%));
+
+  /* Poses cut rather than cross-fade. Dissolving two bodies that stand in
+     different places reads as a double exposure, not as one character. */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.pose.is-on{ opacity: 1; visibility: visible; }
+
+/* Per-pose registration.
+   --fit  head-to-toe height / artwork height
+   --cx   centre of stance / artwork width
+   --fb   gap under the soles / artwork height */
+.pose[data-pose="standing"]       { --fit: .9772; --cx: .5155; --fb: .0130; }
+.pose[data-pose="pointing-left"]  { --fit: .9206; --cx: .5620; --fb: .0378; }
+.pose[data-pose="pointing-right"] { --fit: .9199; --cx: .4332; --fb: .0358; }
+.pose[data-pose="shrugging"]      { --fit: .9681; --cx: .5147; --fb: .0247; }
+.pose[data-pose="arms-folded"]    { --fit: .9661; --cx: .4932; --fb: .0221; }
+
+/* ---------- side controls, outside the canvas ---------- */
+
+.controls{
+  flex: 0 0 232px;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.panel{
+  padding: 18px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 14px;
+  background: #151a24;
+}
+
+.panel h2{
+  margin: 0 0 14px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: #7d8aa0;
+}
+
+.pad{
+  display: grid;
+  grid-template-columns: repeat(3, 58px);
+  grid-template-rows: repeat(3, 58px);
+  gap: 6px;
+  justify-content: center;
+}
+
+.key{
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 12px;
+  background: #1e2531;
+  color: #cdd6e4;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  transition: transform .08s ease, background .12s ease, color .12s ease;
+}
+
+.key svg{
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.key:hover{ background: #252d3b; }
+
+.key:active,
+.key.is-down{
+  transform: scale(.92);
+  background: #2f7fd8;
+  border-color: #2f7fd8;
+  color: #fff;
+}
+
+.key:focus-visible{ outline: 2px solid #2f7fd8; outline-offset: 2px; }
+
+.key-up    { grid-area: 1 / 2; }
+.key-left  { grid-area: 2 / 1; }
+.key-right { grid-area: 2 / 3; }
+.key-down  { grid-area: 3 / 2; }
+
+.note{
+  margin: 14px 0 0;
+  color: #6b7688;
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.field{
+  display: block;
+  margin-bottom: 12px;
+}
+
+.field:last-of-type{ margin-bottom: 0; }
+
+.field span{
+  display: block;
+  margin-bottom: 6px;
+  color: #8b96a8;
+  font-size: 12px;
+}
+
+.field select{
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 9px;
+  background: #1e2531;
+  color: #e7ecf4;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.field select:focus-visible{ outline: 2px solid #2f7fd8; outline-offset: 1px; }
+
+#scaleNote{ text-align: left; }
+
+@media (prefers-reduced-motion: reduce){
+  .character{ animation: none; }
+}
+
+/* Last in the file on purpose: these override .workspace and .too-small, and a
+   media query carries no extra specificity to win on. */
+@media (max-width: 900px), (max-height: 560px){
+  .workspace{ display: none; }
+  .too-small{ display: flex; }
+}
