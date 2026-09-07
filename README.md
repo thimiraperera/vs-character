@@ -152,17 +152,23 @@ updates as you go. It starts as:
 
 ```css
 .subtitle{
-  font-family: Segoe UI, Roboto, sans-serif;
-  font-size: 52px;
-  font-weight: 700;
-  line-height: 1.3;
-  text-align: center;
-  color: #1d2a44;
-  text-shadow: 0 2px 0 rgba(255,255,255,.65);
+	font-family: UN-Sandhyanee, Segoe UI, Roboto, sans-serif;
+	font-size: 56px;
+	font-weight: 500;
+	line-height: 1.3;
+	text-align: center;
+	color: #1d2a44;
+	text-shadow: 0 2px 0 rgba(255,255,255,.65);
 }
 
-.subtitle b{ color: #c8442e; }
+.subtitle b {
+	color: #c8442e;
+}
 ```
+
+Weight 500 is deliberate: the face only ships Regular, so asking for 700 makes
+the browser fake a bold and the Sinhala thickens unevenly. The `<b>` in a
+caption still gets a synthesised bold, which is what the accent colour is for.
 
 Position is deliberately absent: the band above handles it, and everything in
 the box is about how the caption looks. Setting `top`, `bottom`, `left` or
@@ -193,6 +199,10 @@ measured off the live page, divided by the view scale to put it back into
 canvas pixels, and drawn onto a canvas at the full output size. So the file is a
 true 1080 x 1920 even when the window is only showing the canvas at 46%, and
 nothing outside the canvas can wander into shot.
+
+Recording waits for the caption picture before the first frame is taken, so a
+take started the moment the page opens still has its captions in it rather than
+picking them up a beat late.
 
 Chrome writes MP4 with H.264 and AAC; browsers without it fall back to WebM, and
 the file is named to match. The audio is tapped from the same element that is
