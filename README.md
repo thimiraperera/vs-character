@@ -82,12 +82,35 @@ VTT cue settings after the end stamp. These tags survive into the caption:
 
 | in the file | becomes |
 | --- | --- |
-| `<b> <i> <u> <em> <strong>` | the same tag |
+| `<b> <i> <u> <s> <em> <strong> <span>` | the same tag |
+| `<font color="#f00">` | `<span style="color:#f00">` |
+| `<font face="Georgia" size="90">` | `<span style="font-family:Georgia; font-size:90px">` |
 | `<c.name>text</c>` | `<span class="name">` |
 | a line break | `<br>` |
 
-Anything else is shown as literal text rather than being treated as markup, so a
-stray angle bracket in a subtitle file cannot inject anything into the page.
+Inline styles work, so a file written with styling in it renders as styled:
+
+```
+1
+00:00:01,000 --> 00:00:04,000
+Which one is <span style="color:#c8442e; font-size:80px">different</span>?
+```
+
+Every one of those tags may carry `class` and `style`, and `<font>` keeps its
+`color`, `face` and `size`. `size` is read as pixels.
+
+What does not come through is anything that could do more than style text.
+Tags outside the list above stay literal text, so a stray angle bracket cannot
+introduce markup. Attributes other than `class` and `style` are dropped, which
+covers `onclick` and friends. Inside a `style`, any declaration containing
+`url(`, `expression(`, `javascript:`, `@import` or `behavior:` is removed while
+the rest of the rule is kept, so
+
+```
+<span style="background: url(javascript:alert(1)); color: rgb(1,2,3)">u</span>
+```
+
+renders as `<span style="color: rgb(1,2,3)">u</span>`.
 
 ### Where they sit
 
@@ -157,8 +180,9 @@ native resolution.
 
 The layout is fixed rather than responsive, because the output size has to stay
 predictable. The canvas and its panels sit together as one centred block. The
-panels wrap into as many columns as the window height needs, so they never
-scroll, and the canvas takes whatever width they leave over.
+panels start at the top and wrap into as many columns as the window height
+needs, so they never scroll, and the canvas takes whatever width they leave
+over.
 
 Below 1080px wide (or 660px tall) the page shows a short note instead. That is
 the point where the panels need a fourth column and there is no useful room

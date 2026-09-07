@@ -366,17 +366,72 @@
     return isFinite(total) ? total : 0;
   }
 
-  /* Escape everything, then let a short list of tags back in. Anything else in
-     the file stays literal text instead of turning into markup. */
+  /* Declarations that could fetch something or smuggle a script. Everything
+     else in a style attribute is just presentation and is let through. */
+  var CSS_TRAPS = /url\s*\(|expression\s*\(|javascript\s*:|@import|behaviou?r\s*:|&/i;
+
+  function cleanStyle(value) {
+    var parts = value.replace(/\/\*[\s\S]*?\*\//g, "").split(";");
+    var kept = [];
+    for (var i = 0; i < parts.length; i++) {
+      var decl = parts[i].trim();
+      if (decl && !CSS_TRAPS.test(decl)) kept.push(decl);
+    }
+    return kept.join("; ");
+  }
+
+  /* Keeps class and style, and turns the old font attributes into a style,
+     since that is how most .srt files carry colour. */
+  function keepAttrs(tag, raw) {
+    var style = "";
+    var cls = "";
+    var re = /([a-zA-Z-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+    var found;
+
+    function add(decl) { style += (style ? ";" : "") + decl; }
+
+    while ((found = re.exec(raw))) {
+      var name = found[1].toLowerCase();
+      var value = (found[2] !== undefined ? found[2] : found[3]).replace(/"/g, "");
+
+      if (name === "style") add(value);
+      else if (name === "class") cls = value;
+      else if (tag === "font") {
+        if (name === "color") add("color:" + value);
+        else if (name === "face") add("font-family:" + value);
+        else if (name === "size" && /^\d+$/.test(value)) add("font-size:" + value + "px");
+      }
+    }
+
+    style = cleanStyle(style);
+    return (cls ? ' class="' + cls + '"' : "") + (style ? ' style="' + style + '"' : "");
+  }
+
+  /* Escape everything, then let a short list of tags back in, with their class
+     and style attributes. Anything that does not match exactly stays literal
+     text instead of turning into markup, so a stray angle bracket in a
+     subtitle file cannot introduce anything. */
   function safeText(raw) {
     var out = raw
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
 
-    out = out.replace(/&lt;(\/?)(b|i|u|em|strong)&gt;/gi, "<$1$2>");
+    out = out.replace(
+      /&lt;(b|i|u|s|em|strong|span|font)((?:\s+[a-zA-Z-]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*&gt;/gi,
+      function (whole, tag, attrs) {
+        var name = tag.toLowerCase();
+        return "<" + (name === "font" ? "span" : name) + keepAttrs(name, attrs || "") + ">";
+      }
+    );
+
+    out = out.replace(/&lt;\/(b|i|u|s|em|strong|span|font)&gt;/gi, function (whole, tag) {
+      var name = tag.toLowerCase();
+      return "</" + (name === "font" ? "span" : name) + ">";
+    });
+
     out = out.replace(/&lt;br\s*\/?&gt;/gi, "<br>");
-    out = out.replace(/&lt;c\.([a-zA-Z0-9_ -]+)&gt;/g, function (m, names) {
+    out = out.replace(/&lt;c\.([a-zA-Z0-9_ .-]+)&gt;/g, function (whole, names) {
       return '<span class="' + names.replace(/\./g, " ") + '">';
     });
     out = out.replace(/&lt;\/c&gt;/gi, "</span>");
