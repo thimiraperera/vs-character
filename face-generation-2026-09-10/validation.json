@@ -1,0 +1,122 @@
+[
+  {
+    "file": "vs-character\\standing\\standing-blink.png",
+    "changed_pixels": 23501,
+    "changed_bbox": [
+      385,
+      250,
+      648,
+      368
+    ],
+    "outside_mask_changed": 0,
+    "alpha_unchanged": true
+  },
+  {
+    "file": "vs-character\\standing\\standing-talk.png",
+    "changed_pixels": 7665,
+    "changed_bbox": [
+      475,
+      371,
+      578,
+      446
+    ],
+    "outside_mask_changed": 0,
+    "alpha_unchanged": true
+  },
+  {
+    "file": "vs-character\\pointing-left\\pointing-left-blink.png",
+    "changed_pixels": 19565,
+    "changed_bbox": [
+      394,
+      233,
+      646,
+      360
+    ],
+    "outside_mask_changed": 0,
+    "alpha_unchanged": true
+  },
+  {
+    "file": "vs-character\\pointing-left\\pointing-left-talk.png",
+    "changed_pixels": 8133,
+    "changed_bbox": [
+      438,
+      356,
+      545,
+      434
+    ],
+    "outside_mask_changed": 0,
+    "alpha_unchanged": true
+  },
+  {
+    "file": "vs-character\\pointing-right\\pointing-right-blink.png",
+    "changed_pixels": 17763,
+    "changed_bbox": [
+      396,
+      220,
+      643,
+      354
+    ],
+    "outside_mask_changed": 0,
+    "alpha_unchanged": true
+  },
+  {
+    "file": "vs-character\\pointing-right\\pointing-right-talk.png",
+    "changed_pixels": 10099,
+    "changed_bbox": [
+      491,
+      342,
+      602,
+      433
+    ],
+    "outside_mask_changed": 0,
+    "alpha_unchanged": true
+  },
+  {
+    "file": "vs-character\\shrugging\\shrugging-blink.png",
+    "changed_pixels": 21108,
+    "changed_bbox": [
+      384,
+      269,
+      652,
+      391
+    ],
+    "outside_mask_changed": 0,
+    "alpha_unchanged": true
+  },
+  {
+    "file": "vs-character\\shrugging\\shrugging-talk.png",
+    "changed_pixels": 5777,
+    "changed_bbox": [
+      484,
+      400,
+      574,
+      467
+    ],
+    "outside_mask_changed": 0,
+    "alpha_unchanged": true
+  },
+  {
+    "file": "vs-character\\arms-folded\\arms-folded-blink.png",
+    "changed_pixels": 19481,
+    "changed_bbox": [
+      383,
+      253,
+      645,
+      364
+    ],
+    "outside_mask_changed": 0,
+    "alpha_unchanged": true
+  },
+  {
+    "file": "vs-character\\arms-folded\\arms-folded-talk.png",
+    "changed_pixels": 9017,
+    "changed_bbox": [
+      461,
+      364,
+      578,
+      441
+    ],
+    "outside_mask_changed": 0,
+    "alpha_unchanged": true
+  }
+]

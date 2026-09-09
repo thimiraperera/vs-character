@@ -24,19 +24,20 @@ Then open <http://localhost:8123/vs-character/>.
 
 | Key | Does |
 | --- | --- |
-| Hold Left | character points left |
-| Hold Right | character points right |
-| Hold Up | character shrugs |
-| Hold Down | character folds her arms |
-| Release | back to standing |
+| Left | character points left |
+| Right | character points right |
+| Up | character shrugs |
+| Down | character folds her arms |
 | `1` | next image in the left square |
 | `2` | next image in the right square |
 | `Space` | play / pause |
 
-Poses are keyboard only, so nothing about the character sits in the panels.
-Clicking a square does the same as its number key. Holding two arrows at once
-shows the most recent and falls back to the one still held when you let go, and
-a key held while the window loses focus resets rather than sticking.
+An arrow key sets the pose and she keeps it: letting go changes nothing, and
+she stays as she is until another arrow, a replay, or the reset button moves
+her. Holding two at once shows the most recent and falls back to the one still
+held when you let go; whatever is on screen when the last key comes up is what
+stays. Poses are keyboard only, so nothing about the character sits in the
+panels, and clicking a square does the same as its number key.
 
 Keys are ignored while you are typing in the CSS box.
 
@@ -237,9 +238,23 @@ that dies part way through says so and keeps whatever was written before it
 went, and data lands every half second rather than all at the end, so a take
 cut short still leaves most of itself behind.
 
+### Why the file used to refuse to open
+
+MediaRecorder writes a **fragmented** mp4. The header carries no sample table at
+all and every frame lives inside a `moof`/`mdat` pair, which is meant for
+streaming rather than for a file on disk. Browsers and VLC read it happily,
+which is why it always looked fine here, but Windows Media Player, the Photos
+app and most video editors will not open one.
+
+So the file is rebuilt before it is offered: the same picture and sound, copied
+across byte for byte with nothing re-encoded, written as an ordinary mp4 with a
+real sample table up front. What comes out is `ftyp`, `moov`, `mdat`, no `mvex`,
+and it opens anywhere.
+
 It all runs in the browser. GitHub Pages only serves the files; the video is
 built on your machine and saved from there, and nothing is uploaded anywhere.
-Verified on the live site: a 1080 x 1920 MP4 with its audio track. The audio is tapped from the same element that is
+Verified: 1080 x 1920, correct duration, frames decoding at every seek, both
+tracks present. The audio is tapped from the same element that is
 playing, so picture and voice come out of one clock and stay together.
 
 Captions are the exception to the painting: rather than reimplementing text
@@ -268,10 +283,10 @@ the nudge buttons for a tenth of a second at a time. Delete removes the selected
 one. Clicking the ruler scrubs, which applies the track at that moment so a
 change can be checked in place.
 
-Scrolling over the timeline zooms it, up to 40x, about the moment under the
-pointer so that moment stays put while the strip stretches around it. The ruler
-re-ticks for what is on screen, down to quarter seconds, and a playhead that
-runs off the edge brings the view along with it.
+The wheel runs along the timeline. Ctrl and the wheel zooms it instead, up to
+40x, about the moment under the pointer so that moment stays put while the strip
+stretches around it. The ruler re-ticks for what is on screen, down to quarter
+seconds, and a playhead that runs off the edge brings the view along with it.
 
 **Record** replays the track into the video, and disarms Capture first so the
 take cannot rewrite the thing it is playing. With no audio, a recording runs to

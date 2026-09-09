@@ -59,9 +59,13 @@
     noteKeyframe("pose", pose);
   }
 
+  /* The pose last asked for by hand. A key puts her in a pose and she stays
+     there when it is let go, until another key or a replay moves her. */
+  var restingPose = DEFAULT_POSE;
+
   function settle() {
     if (held.length) { show(held[held.length - 1].pose); return; }
-    show(trackPose || DEFAULT_POSE);
+    show(trackPose || restingPose);
   }
 
   function press(source, pose) {
@@ -76,10 +80,16 @@
     for (var i = held.length - 1; i >= 0; i--) {
       if (held[i].source === source) held.splice(i, 1);
     }
+
+    /* Letting the last key go leaves her as she is. Remembering the key that
+       went down instead would snap her back to it when two are released in
+       the order they were pressed. */
+    if (!held.length && !trackPose) restingPose = current;
     settle();
   }
 
   function releaseAll() {
+    if (held.length && !trackPose) restingPose = current;
     held.length = 0;
     settle();
   }
@@ -812,6 +822,8 @@
     setCaption("");
     drawClock();
     trackPose = null;
+    restingPose = DEFAULT_POSE;
+    settle();
     applyTrack(0);
     drawPlayhead();
   }
@@ -1035,6 +1047,17 @@
   }
 
   tlGrid.addEventListener("wheel", function (e) {
+    /* Ctrl and the wheel zooms, which is what every timeline does. On its own
+       the wheel runs along the track, so a zoomed-in one can be walked through
+       without reaching for the scrollbar. */
+    if (!e.ctrlKey && !e.metaKey) {
+      if (tlGrid.scrollWidth <= tlGrid.clientWidth + 1) return;
+      e.preventDefault();
+      var roll = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      tlGrid.scrollLeft += roll;
+      return;
+    }
+
     e.preventDefault();
     var span = trackSpan();
     var under = timeFromX(e.clientX);
@@ -1453,6 +1476,338 @@
     art.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(doc);
   }
 
+  /* ---------- making the file open outside a browser ---------- */
+
+  /* MediaRecorder writes a fragmented mp4: the header carries no sample table
+     at all and every frame lives inside a moof/mdat pair. Browsers and VLC read
+     that happily, which is why it looks fine here, but Windows Media Player,
+     the Photos app and most video editors will not open it. This rebuilds the
+     very same picture and sound as an ordinary mp4, with a real sample table up
+     front, which opens anywhere. Nothing is re-encoded and nothing leaves the
+     machine: the frames are copied across byte for byte. */
+
+  function mp4Scan(view, bytes, from, to) {
+    var out = [];
+    var p = from;
+    while (p + 8 <= to) {
+      var size = view.getUint32(p);
+      var type = String.fromCharCode(bytes[p + 4], bytes[p + 5], bytes[p + 6], bytes[p + 7]);
+      var head = 8;
+      if (size === 1) { size = Number(view.getBigUint64(p + 8)); head = 16; }
+      else if (size === 0) { size = to - p; }
+      if (size < head || p + size > to) break;
+      out.push({ type: type, start: p, size: size, body: p + head, end: p + size });
+      p += size;
+    }
+    return out;
+  }
+
+  function mp4Pick(list, type) {
+    for (var i = 0; i < list.length; i++) if (list[i].type === type) return list[i];
+    return null;
+  }
+
+  function mp4Num(n) {
+    return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  }
+
+  function mp4Box(type, parts) {
+    var body = 0;
+    var i;
+    for (i = 0; i < parts.length; i++) body += parts[i].length;
+
+    var out = new Uint8Array(8 + body);
+    out.set(mp4Num(8 + body), 0);
+    for (i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+
+    var at = 8;
+    for (i = 0; i < parts.length; i++) { out.set(parts[i], at); at += parts[i].length; }
+    return out;
+  }
+
+  function mp4Slice(bytes, box) {
+    return bytes.subarray(box.start, box.end);
+  }
+
+  /* Every sample the fragment describes, with where its bytes are. */
+  function mp4Fragment(view, bytes, moof) {
+    var tracks = {};
+    var trafs = mp4Scan(view, bytes, moof.body, moof.end);
+
+    for (var i = 0; i < trafs.length; i++) {
+      if (trafs[i].type !== "traf") continue;
+      var kids = mp4Scan(view, bytes, trafs[i].body, trafs[i].end);
+
+      var tfhd = mp4Pick(kids, "tfhd");
+      if (!tfhd) continue;
+
+      var flags = view.getUint32(tfhd.body) & 0xffffff;
+      var trackId = view.getUint32(tfhd.body + 4);
+      var at = tfhd.body + 8;
+
+      var base = moof.start;
+      if (flags & 0x000001) { base = Number(view.getBigUint64(at)); at += 8; }
+      if (flags & 0x000002) at += 4;
+
+      var defDur = 0, defSize = 0, defFlags = 0;
+      if (flags & 0x000008) { defDur = view.getUint32(at); at += 4; }
+      if (flags & 0x000010) { defSize = view.getUint32(at); at += 4; }
+      if (flags & 0x000020) { defFlags = view.getUint32(at); at += 4; }
+
+      if (!tracks[trackId]) tracks[trackId] = [];
+
+      for (var j = 0; j < kids.length; j++) {
+        if (kids[j].type !== "trun") continue;
+
+        var tflags = view.getUint32(kids[j].body) & 0xffffff;
+        var count = view.getUint32(kids[j].body + 4);
+        var q = kids[j].body + 8;
+
+        var offset = 0;
+        if (tflags & 0x000001) { offset = view.getInt32(q); q += 4; }
+        var firstFlags = null;
+        if (tflags & 0x000004) { firstFlags = view.getUint32(q); q += 4; }
+
+        var where = base + offset;
+
+        for (var k = 0; k < count; k++) {
+          var dur = defDur, size = defSize, sflags = defFlags, cts = 0;
+          if (tflags & 0x000100) { dur = view.getUint32(q); q += 4; }
+          if (tflags & 0x000200) { size = view.getUint32(q); q += 4; }
+          if (tflags & 0x000400) { sflags = view.getUint32(q); q += 4; }
+          if (tflags & 0x000800) { cts = view.getInt32(q); q += 4; }
+          if (k === 0 && firstFlags !== null) sflags = firstFlags;
+
+          tracks[trackId].push({
+            at: where,
+            size: size,
+            dur: dur,
+            cts: cts,
+            sync: !(sflags & 0x00010000)
+          });
+          where += size;
+        }
+      }
+    }
+    return tracks;
+  }
+
+  /* stts, stsz, stsc, stco and friends, worked out from the sample list. */
+  function mp4Tables(samples, dataAt) {
+    var i;
+
+    var stts = [];
+    for (i = 0; i < samples.length; i++) {
+      var last = stts[stts.length - 1];
+      if (last && last[1] === samples[i].dur) last[0]++;
+      else stts.push([1, samples[i].dur]);
+    }
+    var sttsBody = [0, 0, 0, 0].concat(mp4Num(stts.length));
+    for (i = 0; i < stts.length; i++) sttsBody = sttsBody.concat(mp4Num(stts[i][0]), mp4Num(stts[i][1]));
+
+    var stszBody = [0, 0, 0, 0].concat(mp4Num(0), mp4Num(samples.length));
+    for (i = 0; i < samples.length; i++) stszBody = stszBody.concat(mp4Num(samples[i].size));
+
+    /* One chunk holding the lot, which is legal and keeps the table small. */
+    var stscBody = [0, 0, 0, 0].concat(mp4Num(1), mp4Num(1), mp4Num(samples.length), mp4Num(1));
+    var stcoBody = [0, 0, 0, 0].concat(mp4Num(1), mp4Num(dataAt));
+
+    var boxes = [
+      mp4Box("stts", [new Uint8Array(sttsBody)]),
+      mp4Box("stsc", [new Uint8Array(stscBody)]),
+      mp4Box("stsz", [new Uint8Array(stszBody)]),
+      mp4Box("stco", [new Uint8Array(stcoBody)])
+    ];
+
+    var syncs = [];
+    for (i = 0; i < samples.length; i++) if (samples[i].sync) syncs.push(i + 1);
+    if (syncs.length && syncs.length !== samples.length) {
+      var stssBody = [0, 0, 0, 0].concat(mp4Num(syncs.length));
+      for (i = 0; i < syncs.length; i++) stssBody = stssBody.concat(mp4Num(syncs[i]));
+      boxes.push(mp4Box("stss", [new Uint8Array(stssBody)]));
+    }
+
+    var shifted = false;
+    for (i = 0; i < samples.length; i++) if (samples[i].cts) { shifted = true; break; }
+    if (shifted) {
+      var cttsBody = [0, 0, 0, 0].concat(mp4Num(samples.length));
+      for (i = 0; i < samples.length; i++) cttsBody = cttsBody.concat(mp4Num(samples[i].cts));
+      boxes.push(mp4Box("ctts", [new Uint8Array(cttsBody)]));
+    }
+
+    return boxes;
+  }
+
+  /* Where the duration sits depends on the box and on its version. mvhd and
+     mdhd carry a timescale before it; tkhd carries a track id and a spare
+     field instead, so the two layouts do not line up. */
+  function mp4WriteDuration(bytes, box, value) {
+    var copy = new Uint8Array(mp4Slice(bytes, box));
+    var wide = copy[8] === 1;
+    var at;
+
+    if (box.type === "tkhd") at = wide ? 36 : 28;
+    else at = wide ? 32 : 24;
+
+    if (wide) {
+      /* 64 bit, and the high half is zero for anything of this length. */
+      copy.set([0, 0, 0, 0], at);
+      copy.set(mp4Num(value), at + 4);
+    } else {
+      copy.set(mp4Num(value), at);
+    }
+    return copy;
+  }
+
+  function toProgressiveMp4(bytes) {
+    var view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    var top = mp4Scan(view, bytes, 0, bytes.length);
+
+    var ftyp = mp4Pick(top, "ftyp");
+    var moov = mp4Pick(top, "moov");
+    if (!ftyp || !moov) return null;
+
+    var moofs = [];
+    for (var i = 0; i < top.length; i++) if (top[i].type === "moof") moofs.push(top[i]);
+    if (!moofs.length) return null;
+
+    /* Gather every sample from every fragment, per track. */
+    var perTrack = {};
+    for (i = 0; i < moofs.length; i++) {
+      var found = mp4Fragment(view, bytes, moofs[i]);
+      for (var id in found) {
+        if (!Object.prototype.hasOwnProperty.call(found, id)) continue;
+        if (!perTrack[id]) perTrack[id] = [];
+        perTrack[id] = perTrack[id].concat(found[id]);
+      }
+    }
+
+    var moovKids = mp4Scan(view, bytes, moov.body, moov.end);
+    var mvhd = mp4Pick(moovKids, "mvhd");
+    if (!mvhd) return null;
+
+    var movieScale = view.getUint32(mvhd.body + (bytes[mvhd.body] === 1 ? 20 : 12));
+
+    /* The header comes before the data, and its size depends on the offsets it
+       carries, so the tables are built twice: once to learn how long the header
+       is, and again with the offsets that follow from it. */
+    var built = null;
+    var guess = 0;
+
+    for (var pass = 0; pass < 3; pass++) {
+      var traks = [];
+
+      /* Where the first sample will land: after the header, and after the
+         eight bytes of the mdat box that wraps the samples. Leaving those out
+         puts every offset short by eight, which decodes to a black picture. */
+      var dataAt = ftyp.size + guess + 8;
+      var longest = 0;
+
+      for (var t = 0; t < moovKids.length; t++) {
+        if (moovKids[t].type !== "trak") continue;
+
+        var trakKids = mp4Scan(view, bytes, moovKids[t].body, moovKids[t].end);
+        var tkhd = mp4Pick(trakKids, "tkhd");
+        var mdia = mp4Pick(trakKids, "mdia");
+        if (!tkhd || !mdia) return null;
+
+        var trackId = view.getUint32(tkhd.body + (bytes[tkhd.body] === 1 ? 20 : 12));
+        var samples = perTrack[trackId] || [];
+
+        var mdiaKids = mp4Scan(view, bytes, mdia.body, mdia.end);
+        var mdhd = mp4Pick(mdiaKids, "mdhd");
+        var minf = mp4Pick(mdiaKids, "minf");
+        if (!mdhd || !minf) return null;
+
+        var mediaScale = view.getUint32(mdhd.body + (bytes[mdhd.body] === 1 ? 20 : 12));
+
+        var span = 0;
+        for (i = 0; i < samples.length; i++) span += samples[i].dur;
+        var movieSpan = mediaScale ? Math.round(span * movieScale / mediaScale) : 0;
+        if (movieSpan > longest) longest = movieSpan;
+
+        var minfKids = mp4Scan(view, bytes, minf.body, minf.end);
+        var stbl = mp4Pick(minfKids, "stbl");
+        if (!stbl) return null;
+
+        var stsd = mp4Pick(mp4Scan(view, bytes, stbl.body, stbl.end), "stsd");
+        if (!stsd) return null;
+
+        var stblParts = [mp4Slice(bytes, stsd)].concat(mp4Tables(samples, dataAt));
+        for (i = 0; i < samples.length; i++) dataAt += samples[i].size;
+
+        var minfParts = [];
+        for (i = 0; i < minfKids.length; i++) {
+          minfParts.push(minfKids[i].type === "stbl"
+            ? mp4Box("stbl", stblParts)
+            : mp4Slice(bytes, minfKids[i]));
+        }
+
+        var mdiaParts = [];
+        for (i = 0; i < mdiaKids.length; i++) {
+          if (mdiaKids[i].type === "mdhd") mdiaParts.push(mp4WriteDuration(bytes, mdhd, span));
+          else if (mdiaKids[i].type === "minf") mdiaParts.push(mp4Box("minf", minfParts));
+          else mdiaParts.push(mp4Slice(bytes, mdiaKids[i]));
+        }
+
+        var trakParts = [];
+        for (i = 0; i < trakKids.length; i++) {
+          if (trakKids[i].type === "tkhd") trakParts.push(mp4WriteDuration(bytes, tkhd, movieSpan));
+          else if (trakKids[i].type === "mdia") trakParts.push(mp4Box("mdia", mdiaParts));
+          else if (trakKids[i].type === "edts") continue;
+          else trakParts.push(mp4Slice(bytes, trakKids[i]));
+        }
+
+        traks.push(mp4Box("trak", trakParts));
+      }
+
+      var moovParts = [mp4WriteDuration(bytes, mvhd, longest)];
+      for (i = 0; i < traks.length; i++) moovParts.push(traks[i]);
+      for (i = 0; i < moovKids.length; i++) {
+        var kind = moovKids[i].type;
+        if (kind === "mvhd" || kind === "trak" || kind === "mvex") continue;
+        moovParts.push(mp4Slice(bytes, moovKids[i]));
+      }
+
+      built = mp4Box("moov", moovParts);
+      if (built.length === guess) break;
+      guess = built.length;
+    }
+
+    if (!built) return null;
+
+    /* The samples themselves, copied over in the order the tables promise. */
+    var total = 0;
+    var order = [];
+    for (var m = 0; m < moovKids.length; m++) {
+      if (moovKids[m].type !== "trak") continue;
+      var kids2 = mp4Scan(view, bytes, moovKids[m].body, moovKids[m].end);
+      var head = mp4Pick(kids2, "tkhd");
+      var id2 = view.getUint32(head.body + (bytes[head.body] === 1 ? 20 : 12));
+      var list = perTrack[id2] || [];
+      order.push(list);
+      for (i = 0; i < list.length; i++) total += list[i].size;
+    }
+
+    var out = new Uint8Array(ftyp.size + built.length + 8 + total);
+    var at = 0;
+    out.set(mp4Slice(bytes, ftyp), at); at += ftyp.size;
+    out.set(built, at); at += built.length;
+    out.set(mp4Num(8 + total), at);
+    out[at + 4] = 109; out[at + 5] = 100; out[at + 6] = 97; out[at + 7] = 116;
+    at += 8;
+
+    for (m = 0; m < order.length; m++) {
+      for (i = 0; i < order[m].length; i++) {
+        var one = order[m][i];
+        out.set(bytes.subarray(one.at, one.at + one.size), at);
+        at += one.size;
+      }
+    }
+
+    return out;
+  }
+
   /* ---------- recording ---------- */
 
   var recBtn = document.getElementById("recBtn");
@@ -1741,11 +2096,33 @@
       return;
     }
 
+    if (kind !== "mp4") {
+      offerFile(blob, kind, "");
+      return;
+    }
+
+    recInfo.textContent = "tidying the file";
+    blob.arrayBuffer().then(function (raw) {
+      var tidy = null;
+      try {
+        tidy = toProgressiveMp4(new Uint8Array(raw));
+      } catch (err) {
+        tidy = null;
+      }
+
+      if (tidy) offerFile(new Blob([tidy], { type: "video/mp4" }), "mp4", "");
+      else offerFile(blob, "mp4", ", as written by the browser");
+    }, function () {
+      offerFile(blob, "mp4", "");
+    });
+  }
+
+  function offerFile(blob, kind, note) {
     saveUrl = URL.createObjectURL(blob);
     recSave.href = saveUrl;
     recSave.download = "character." + kind;
     recSave.hidden = false;
-    recInfo.textContent = kind + ", " + (blob.size / 1048576).toFixed(1) + " MB";
+    recInfo.textContent = kind + ", " + (blob.size / 1048576).toFixed(1) + " MB" + note;
   }
 
   function stopRecording() {
