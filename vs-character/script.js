@@ -1159,42 +1159,79 @@
 
   /* ---------- blinks and the mouth ---------- */
 
-  /* Optional frames beside each pose: <pose>-blink.png with the eyes shut,
-     <pose>-talk.png with the mouth open, <pose>-talk2.png wider still. Each is
-     the pose's own file with only the face changed, so it sits on top of the
-     base at the same registration and covers it exactly. A pose without them
-     simply does not blink or speak. */
+  /* Optional frames beside each pose, each one the pose's own file with only
+     the face changed, so it lies over the base at the same registration and
+     covers it exactly:
+
+       <pose>-blink.png     eyes shut
+       <pose>-talk-a.png    mouth wide open
+       <pose>-talk-e.png    mid open, corners wide
+       <pose>-talk-o.png    small and rounded
+       <pose>-talk-m.png    lips together
+       <pose>-talk-s.png    narrow, upper teeth
+
+     A pose with none of them simply does not blink or speak, and one with only
+     the older <pose>-talk.png still works from that. */
+  var MOUTH_SHAPES = ["talk-a", "talk-e", "talk-o", "talk-m", "talk-s"];
+  var OLDER_MOUTHS = ["talk", "talk2"];
+
+  /* How the face behaves. Shorter shut time is a faster blink; shorter waits
+     mean more of them. */
+  var BLINK_SHUT = 70;
+  var BLINK_WAIT = 1900;
+  var BLINK_SPREAD = 2300;
+  var BLINK_AGAIN = 0.16;
+  var BLINK_SOON = 150;
+
+  var MOUTH_HOLD = 70;
+  var MOUTH_SPREAD = 60;
+  var MOUTH_REST = 0.12;
+
   var faces = {};
   var activeFace = null;
   var blinkAt = 0;
   var blinkUntil = 0;
   var mouthAt = 0;
-  var mouthStep = 0;
+  var mouthNow = null;
+  var lastMouth = null;
   var characterBox = document.getElementById("character");
 
-  function probeFace(pose, kind) {
+  function probeFace(pose, suffix, onSettled) {
     var img = document.createElement("img");
     img.className = "pose face";
     img.dataset.pose = pose;
     img.alt = "";
+
     img.addEventListener("load", function () {
-      faces[pose][kind] = img;
+      if (suffix === "blink") faces[pose].blink = img;
+      else faces[pose].mouths.push(img);
       characterBox.appendChild(img);
       if (img.decode) img.decode().catch(function () {});
-
-      /* The wider mouth is only worth asking for once the narrower one is
-         known to exist, which keeps the probing to two files per pose. */
-      if (kind === "talk") probeFace(pose, "talk2");
+      if (onSettled) onSettled();
     });
-    img.addEventListener("error", function () { faces[pose][kind] = null; });
-    img.src = pose + "/" + pose + "-" + kind + ".png";
+
+    img.addEventListener("error", function () { if (onSettled) onSettled(); });
+    img.src = pose + "/" + pose + "-" + suffix + ".png";
+  }
+
+  function loadFaces(pose) {
+    faces[pose] = { blink: null, mouths: [] };
+    probeFace(pose, "blink", null);
+
+    /* The older pair is only asked for once the named shapes have all had
+       their turn and none of them answered, which keeps the misses down. */
+    var waiting = MOUTH_SHAPES.length;
+    function settled() {
+      waiting--;
+      if (waiting || faces[pose].mouths.length) return;
+      for (var i = 0; i < OLDER_MOUTHS.length; i++) probeFace(pose, OLDER_MOUTHS[i], null);
+    }
+
+    for (var i = 0; i < MOUTH_SHAPES.length; i++) probeFace(pose, MOUTH_SHAPES[i], settled);
   }
 
   for (var facePose in poses) {
-    if (!Object.prototype.hasOwnProperty.call(poses, facePose)) continue;
-    faces[facePose] = { blink: null, talk: null, talk2: null };
-    probeFace(facePose, "blink");
-    probeFace(facePose, "talk");
+    if (Object.prototype.hasOwnProperty.call(poses, facePose)) loadFaces(facePose);
   }
 
   function showFace(img) {
@@ -1204,42 +1241,54 @@
     if (activeFace) activeFace.classList.add("is-on");
   }
 
+  /* A shape at random, never the same one twice running, with the odd closed
+     beat standing in for the gap between words. */
+  function nextMouth(set) {
+    if (!set.mouths.length) return null;
+    if (Math.random() < MOUTH_REST) return null;
+    if (set.mouths.length === 1) return set.mouths[0];
+
+    var pick = set.mouths[Math.floor(Math.random() * set.mouths.length)];
+    if (pick === lastMouth) {
+      var at = set.mouths.indexOf(pick);
+      pick = set.mouths[(at + 1) % set.mouths.length];
+    }
+    return pick;
+  }
+
   function faceTick() {
     var now = performance.now();
-    var set = faces[current] || {};
+    var set = faces[current] || { blink: null, mouths: [] };
 
-    /* Blinks come every few seconds, a shade irregular, now and then as a
-       quick pair. They carry on while paused, so she looks alive in a hold. */
-    if (!blinkAt) blinkAt = now + 1200 + Math.random() * 2500;
-    if (!blinkUntil && now >= blinkAt) blinkUntil = now + 110;
+    /* Blinks come every couple of seconds, a shade irregular, now and then as
+       a quick pair. They carry on while paused, so she looks alive in a hold. */
+    if (!blinkAt) blinkAt = now + 900 + Math.random() * BLINK_SPREAD;
+    if (!blinkUntil && now >= blinkAt) blinkUntil = now + BLINK_SHUT;
     if (blinkUntil && now >= blinkUntil) {
       blinkUntil = 0;
-      blinkAt = now + (Math.random() < 0.12 ? 170 : 2500 + Math.random() * 3500);
+      blinkAt = now + (Math.random() < BLINK_AGAIN
+        ? BLINK_SOON
+        : BLINK_WAIT + Math.random() * BLINK_SPREAD);
     }
 
-    /* The mouth moves only while a line is on screen and the clock is running,
-       stepping between frames at an uneven pace so it does not look mechanical. */
-    var talking = playing && shownCue !== -1 && (set.talk || set.talk2);
+    /* The mouth moves only while a line is on screen and the clock is
+       running, changing shape at an uneven pace so it does not look counted
+       out. */
+    var talking = playing && shownCue !== -1 && set.mouths.length > 0;
     if (talking) {
       if (now >= mouthAt) {
-        mouthStep = (mouthStep + 1) % 4;
-        mouthAt = now + 80 + Math.random() * 70;
+        mouthNow = nextMouth(set);
+        lastMouth = mouthNow;
+        mouthAt = now + MOUTH_HOLD + Math.random() * MOUTH_SPREAD;
       }
     } else {
-      mouthStep = 0;
+      mouthNow = null;
+      lastMouth = null;
       mouthAt = 0;
     }
 
-    var want = null;
-    if (blinkUntil && set.blink) {
-      want = set.blink;
-    } else if (talking) {
-      var cycle = set.talk2
-        ? [null, set.talk, set.talk2, set.talk]
-        : [null, set.talk, null, set.talk];
-      want = cycle[mouthStep];
-    }
-    showFace(want);
+    if (blinkUntil && set.blink) showFace(set.blink);
+    else showFace(talking ? mouthNow : null);
   }
 
   setInterval(faceTick, 40);

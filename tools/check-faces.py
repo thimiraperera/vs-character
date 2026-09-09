@@ -5,9 +5,9 @@ eyes or the mouth. A fresh generation can look identical and still be a pixel
 or two out everywhere, which the app shows as the whole character shimmering
 on every blink. Looking cannot tell the two apart; this can.
 
-For every <pose>/<pose>-blink.png, -talk.png and -talk2.png it finds, it
-reports how much of the picture differs from the base and where, and passes
-it only when the change is small and sits inside the head.
+For every frame it finds beside a pose, the blink and each of the mouth
+shapes, it reports how much of the picture differs from the base and where,
+and passes it only when the change is small and sits inside the head.
 
     python tools/check-faces.py
 
@@ -21,7 +21,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ART = os.path.join(ROOT, "vs-character")
 POSES = ["standing", "pointing-left", "pointing-right", "shrugging", "arms-folded"]
-KINDS = ["blink", "talk", "talk2"]
+KINDS = ["blink", "talk", "talk2", "talk-a", "talk-e", "talk-o", "talk-m", "talk-s"]
 
 ALPHA = 32          # what counts as a drawn pixel
 CHANGE = 24         # how far a channel must move to count as changed
@@ -81,7 +81,7 @@ def main():
     found = 0
     failures = 0
 
-    print("%-15s %-6s %9s %8s %-22s   %s" % ("pose", "frame", "changed", "share", "changed box (y)", "result"))
+    print("%-15s %-8s %9s %8s %-22s   %s" % ("pose", "frame", "changed", "share", "changed box (y)", "result"))
 
     for pose in POSES:
         base_path = os.path.join(ART, pose, pose + ".png")
@@ -107,12 +107,12 @@ def main():
             try:
                 fw, fh, fpx = measure.load_rgba(path)
             except ValueError as err:
-                print("%-15s %-6s %s" % (pose, kind, "FAIL  " + str(err)))
+                print("%-15s %-8s %s" % (pose, kind, "FAIL  " + str(err)))
                 failures += 1
                 continue
 
             if (fw, fh) != (bw, bh):
-                print("%-15s %-6s %s" % (pose, kind, "FAIL  canvas is %dx%d, base is %dx%d" % (fw, fh, bw, bh)))
+                print("%-15s %-8s %s" % (pose, kind, "FAIL  canvas is %dx%d, base is %dx%d" % (fw, fh, bw, bh)))
                 failures += 1
                 continue
 
@@ -132,11 +132,11 @@ def main():
                 failures += 1
 
             box = "%d..%d" % (y0, y1) if changed else "-"
-            print("%-15s %-6s %9d %7.1f%% %-22s   %s" % (pose, kind, changed, share, box, verdict))
+            print("%-15s %-8s %9d %7.1f%% %-22s   %s" % (pose, kind, changed, share, box, verdict))
 
     print()
     if not found:
-        print("No blink or talk frames found yet. See face-generation-guide.md.")
+        print("No blink or mouth frames found yet. See mouth-generation-guide.md.")
         return 0
     if failures:
         print("%d frame(s) are not the base with only the face changed." % failures)

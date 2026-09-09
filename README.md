@@ -306,17 +306,22 @@ running, her mouth moves, stepping between frames at an uneven pace so it does
 not look mechanical. Both are drawn into the recording. Neither is a keyframe;
 they happen on their own.
 
-They need frames the artwork does not have yet: next to each pose file,
-`<pose>-blink.png` with the eyes shut, `<pose>-talk.png` with the mouth open,
-and optionally `<pose>-talk2.png` wider still. A pose without them simply does
-not blink or speak. Until they exist the console shows a 404 for each missing
-one; that is the app checking.
+The blink frames are in. The mouth reads from up to five shapes beside each
+pose, `<pose>-talk-a.png` through `<pose>-talk-s.png`, and picks among whichever
+exist: never the same one twice running, each held 70 to 130ms, with the odd
+closed beat standing in for a gap between words. It is not lip sync, since
+nothing reads the audio; the variety is what stops it looking counted out.
 
-`face-generation-guide.md` says how to make them. The one rule is that each is
-the pose file with only the face changed and every other pixel identical, which
-means editing the base in place rather than generating afresh: a fresh
-generation moves every outline by a pixel or two, and the app shows that as
-the whole character shimmering on each blink. Whether a frame passes that rule
+The older single `<pose>-talk.png` still works, so a pose without the named
+shapes falls back to it rather than going still. Once a pose has any named
+shape its old file is ignored and can be deleted.
+
+`mouth-generation-guide.md` says how to make the shapes, and carries the mouth
+rectangle already worked out for each pose. The one rule is that each frame is
+the pose file with only the mouth changed and every other pixel identical,
+which means editing the base in place rather than generating afresh: a fresh
+generation moves every outline by a pixel or two, and the app shows that as the
+whole character twitching on every syllable. Whether a frame passes that rule
 is measurable:
 
 ```bash
@@ -324,9 +329,10 @@ python tools/check-faces.py
 ```
 
 It reports how much of each frame differs from its base and where, and passes
-only a small change that sits inside the head. Tested with a face-only edit,
-which passed at 0.2%, and a whole-image nudge standing in for a regeneration,
-which failed at 62.9%.
+only a small change that sits inside the head. The ten frames in the repo pass:
+blinks at 1.7 to 2.0% of the figure, mouths at 0.4 to 0.6%, every one of them
+inside the head. A whole-image nudge standing in for a regeneration fails at
+62.9%.
 
 ## Canvas
 
