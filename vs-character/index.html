@@ -228,6 +228,7 @@
       </button>
       <button class="btn" id="tlClear" type="button">Clear</button>
       <span class="tl-info" id="tlInfo">nothing captured</span>
+      <span class="tl-info" id="tlZoomInfo" title="Scroll over the timeline to zoom">1x</span>
       <span class="tl-spacer"></span>
       <span class="tl-sel" id="tlSel">nothing selected</span>
       <button class="btn tl-small" id="tlBack" type="button" disabled aria-label="Move 0.1s earlier">&#8722;0.1s</button>
@@ -244,17 +245,20 @@
       </div>
 
       <div class="tl-grid" id="tlGrid">
+       <div class="tl-zoom" id="tlZoom">
         <div class="tl-ruler" id="tlRuler"></div>
         <div class="tl-lane" data-lane="pose"></div>
         <div class="tl-lane" data-lane="a"></div>
         <div class="tl-lane" data-lane="b"></div>
         <div class="tl-playhead" id="tlPlayhead"></div>
+       </div>
       </div>
     </div>
 
     <p class="note">Arm Capture, then Play and drive the scene: every pose and image change is
       kept as a keyframe. Play again with Capture off to replay it. Drag a keyframe to retime it,
-      click the ruler to scrub. Record replays the track into the video.</p>
+      click the ruler to scrub. Scroll over the timeline to zoom in and out. Record replays the track
+      into the video.</p>
 
   </section>
 

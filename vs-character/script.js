@@ -843,6 +843,9 @@
   var tlInfo = document.getElementById("tlInfo");
   var tlSel = document.getElementById("tlSel");
   var tlGrid = document.getElementById("tlGrid");
+  var tlZoom = document.getElementById("tlZoom");
+  var tlZoomInfo = document.getElementById("tlZoomInfo");
+  var zoomLevel = 1;
   var tlRuler = document.getElementById("tlRuler");
   var tlPlayhead = document.getElementById("tlPlayhead");
   var tlBack = document.getElementById("tlBack");
@@ -932,13 +935,14 @@
     var span = trackSpan();
 
     tlRuler.innerHTML = "";
-    var step = span > 40 ? 5 : span > 16 ? 2 : 1;
+    var visible = span / zoomLevel;
+    var step = visible > 40 ? 5 : visible > 16 ? 2 : visible > 6 ? 1 : visible > 2.5 ? 0.5 : 0.25;
     for (var t = 0; t <= span + 0.001; t += step) {
       var tick = document.createElement("div");
       tick.className = "tl-tick";
       tick.style.left = (100 * t / span) + "%";
       var label = document.createElement("span");
-      label.textContent = t + "s";
+      label.textContent = (Math.round(t * 100) / 100) + "s";
       tick.appendChild(label);
       tlRuler.appendChild(tick);
     }
@@ -976,6 +980,13 @@
   function drawPlayhead() {
     var span = trackSpan();
     tlPlayhead.style.left = (100 * Math.min(elapsed, span) / span) + "%";
+
+    if (!playing || zoomLevel <= 1) return;
+    var x = Math.min(elapsed, span) / span * tlZoom.getBoundingClientRect().width;
+    var view = tlGrid.clientWidth;
+    if (x < tlGrid.scrollLeft || x > tlGrid.scrollLeft + view) {
+      tlGrid.scrollLeft = Math.max(0, x - view * 0.3);
+    }
   }
 
   function findKey(id) {
@@ -1010,11 +1021,35 @@
   }
 
   function timeFromX(clientX) {
-    var box = tlGrid.getBoundingClientRect();
+    var box = tlZoom.getBoundingClientRect();
     var span = trackSpan();
     var at = (clientX - box.left) / box.width * span;
     return Math.max(0, Math.min(span, at));
   }
+
+  /* Scrolling over the timeline zooms it, about the moment under the pointer
+     so that moment stays put while the strip stretches around it. */
+  function applyZoom() {
+    tlZoom.style.width = (zoomLevel * 100) + "%";
+    tlZoomInfo.textContent = (Math.round(zoomLevel * 10) / 10) + "x";
+  }
+
+  tlGrid.addEventListener("wheel", function (e) {
+    e.preventDefault();
+    var span = trackSpan();
+    var under = timeFromX(e.clientX);
+    var factor = e.deltaY < 0 ? 1.18 : 1 / 1.18;
+
+    zoomLevel = Math.max(1, Math.min(40, zoomLevel * factor));
+    applyZoom();
+
+    var strip = tlZoom.getBoundingClientRect().width;
+    var grid = tlGrid.getBoundingClientRect();
+    tlGrid.scrollLeft = under / span * strip - (e.clientX - grid.left);
+    drawTrack();
+  }, { passive: false });
+
+  applyZoom();
 
   /* Dragging a keyframe retimes it. */
   var dragging = null;
@@ -1098,6 +1133,93 @@
   });
 
   drawTrack();
+
+  /* ---------- blinks and the mouth ---------- */
+
+  /* Optional frames beside each pose: <pose>-blink.png with the eyes shut,
+     <pose>-talk.png with the mouth open, <pose>-talk2.png wider still. Each is
+     the pose's own file with only the face changed, so it sits on top of the
+     base at the same registration and covers it exactly. A pose without them
+     simply does not blink or speak. */
+  var faces = {};
+  var activeFace = null;
+  var blinkAt = 0;
+  var blinkUntil = 0;
+  var mouthAt = 0;
+  var mouthStep = 0;
+  var characterBox = document.getElementById("character");
+
+  function probeFace(pose, kind) {
+    var img = document.createElement("img");
+    img.className = "pose face";
+    img.dataset.pose = pose;
+    img.alt = "";
+    img.addEventListener("load", function () {
+      faces[pose][kind] = img;
+      characterBox.appendChild(img);
+      if (img.decode) img.decode().catch(function () {});
+
+      /* The wider mouth is only worth asking for once the narrower one is
+         known to exist, which keeps the probing to two files per pose. */
+      if (kind === "talk") probeFace(pose, "talk2");
+    });
+    img.addEventListener("error", function () { faces[pose][kind] = null; });
+    img.src = pose + "/" + pose + "-" + kind + ".png";
+  }
+
+  for (var facePose in poses) {
+    if (!Object.prototype.hasOwnProperty.call(poses, facePose)) continue;
+    faces[facePose] = { blink: null, talk: null, talk2: null };
+    probeFace(facePose, "blink");
+    probeFace(facePose, "talk");
+  }
+
+  function showFace(img) {
+    if (activeFace === img) return;
+    if (activeFace) activeFace.classList.remove("is-on");
+    activeFace = img || null;
+    if (activeFace) activeFace.classList.add("is-on");
+  }
+
+  function faceTick() {
+    var now = performance.now();
+    var set = faces[current] || {};
+
+    /* Blinks come every few seconds, a shade irregular, now and then as a
+       quick pair. They carry on while paused, so she looks alive in a hold. */
+    if (!blinkAt) blinkAt = now + 1200 + Math.random() * 2500;
+    if (!blinkUntil && now >= blinkAt) blinkUntil = now + 110;
+    if (blinkUntil && now >= blinkUntil) {
+      blinkUntil = 0;
+      blinkAt = now + (Math.random() < 0.12 ? 170 : 2500 + Math.random() * 3500);
+    }
+
+    /* The mouth moves only while a line is on screen and the clock is running,
+       stepping between frames at an uneven pace so it does not look mechanical. */
+    var talking = playing && shownCue !== -1 && (set.talk || set.talk2);
+    if (talking) {
+      if (now >= mouthAt) {
+        mouthStep = (mouthStep + 1) % 4;
+        mouthAt = now + 80 + Math.random() * 70;
+      }
+    } else {
+      mouthStep = 0;
+      mouthAt = 0;
+    }
+
+    var want = null;
+    if (blinkUntil && set.blink) {
+      want = set.blink;
+    } else if (talking) {
+      var cycle = set.talk2
+        ? [null, set.talk, set.talk2, set.talk]
+        : [null, set.talk, null, set.talk];
+      want = cycle[mouthStep];
+    }
+    showFace(want);
+  }
+
+  setInterval(faceTick, 40);
 
   /* ---------- drawing the scene onto a canvas ---------- */
 
@@ -1241,6 +1363,11 @@
       brush.drawImage(pose, p.x, p.y, p.w, p.h);
     }
 
+    if (activeFace && activeFace.naturalWidth) {
+      var fx = boxOf(activeFace);
+      brush.drawImage(activeFace, fx.x, fx.y, fx.w, fx.h);
+    }
+
     if (captionArt) brush.drawImage(captionArt, 0, 0, canvasW, canvasH);
   }
 
@@ -1377,16 +1504,17 @@
     return audioTap.stream.getAudioTracks();
   }
 
+  var FORMATS = [
+    "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+    "video/mp4",
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm"
+  ];
+
   function pickFormat() {
-    var wanted = [
-      "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
-      "video/mp4",
-      "video/webm;codecs=vp9,opus",
-      "video/webm;codecs=vp8,opus",
-      "video/webm"
-    ];
-    for (var i = 0; i < wanted.length; i++) {
-      if (window.MediaRecorder && MediaRecorder.isTypeSupported(wanted[i])) return wanted[i];
+    for (var i = 0; i < FORMATS.length; i++) {
+      if (window.MediaRecorder && MediaRecorder.isTypeSupported(FORMATS[i])) return FORMATS[i];
     }
     return "";
   }
@@ -1529,28 +1657,28 @@
     var stream = frame.captureStream(30);
     for (var i = 0; i < voiceTracks.length; i++) stream.addTrack(voiceTracks[i]);
 
-    try {
-      recorder = new MediaRecorder(stream, { mimeType: format, videoBitsPerSecond: 12000000 });
-    } catch (err) {
+    /* A browser can say yes to a format and still refuse it once a real stream
+       is attached, most often h264 on a machine without the encoder for it.
+       Each one is tried for real, in order, until one actually starts. */
+    var order = [format];
+    for (var n = 0; n < FORMATS.length; n++) {
+      if (FORMATS[n] !== format) order.push(FORMATS[n]);
+    }
+
+    var opened = null;
+    for (var k = 0; k < order.length && !opened; k++) {
+      if (!MediaRecorder.isTypeSupported(order[k])) continue;
+      opened = openRecorder(stream, order[k]);
+    }
+
+    if (!opened) {
       recInfo.textContent = "this browser cannot record";
       recBtn.classList.remove("is-live");
       recLabel.textContent = "Record";
       return;
     }
 
-    recorder.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
-
-    recorder.onstop = function () {
-      var kind = format.indexOf("mp4") !== -1 ? "mp4" : "webm";
-      var blob = new Blob(chunks, { type: format.split(";")[0] });
-      saveUrl = URL.createObjectURL(blob);
-      recSave.href = saveUrl;
-      recSave.download = "character." + kind;
-      recSave.hidden = false;
-      recInfo.textContent = kind + ", " + (blob.size / 1048576).toFixed(1) + " MB";
-    };
-
-    recorder.start();
+    recorder = opened;
     painting = setInterval(step, 200);
 
     phase = "head";
@@ -1560,6 +1688,64 @@
     phaseTimer = setTimeout(startRun, HANDLE * 1000);
 
     drawing = requestAnimationFrame(paintLoop);
+  }
+
+  var recFormat = "";
+  var lastFinished = null;
+
+  function openRecorder(stream, mime) {
+    var rec;
+    try {
+      rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12000000 });
+    } catch (err) {
+      return null;
+    }
+
+    rec.ondataavailable = function (e) {
+      if (e.data && e.data.size) chunks.push(e.data);
+    };
+
+    rec.onstop = function () { finishRecording(rec); };
+
+    /* A take that dies part way used to leave the button on Stop and the
+       note on "saving" with nothing behind it. Say what happened and keep
+       whatever was written before it went. */
+    rec.onerror = function (e) {
+      var why = (e && e.error && e.error.name) || "the encoder gave up";
+      recInfo.textContent = "recording stopped: " + why;
+      stopRecording();
+    };
+
+    try {
+      /* Data lands every half second rather than all at the end, so a take
+         that is cut short still leaves most of itself behind. */
+      rec.start(500);
+    } catch (err) {
+      return null;
+    }
+
+    recFormat = mime;
+    return rec;
+  }
+
+  function finishRecording(rec) {
+    if (lastFinished === rec) return;
+    lastFinished = rec;
+
+    var kind = recFormat.indexOf("mp4") !== -1 ? "mp4" : "webm";
+    var blob = new Blob(chunks, { type: recFormat.split(";")[0] });
+
+    if (!blob.size) {
+      recInfo.textContent = "nothing was recorded";
+      recSave.hidden = true;
+      return;
+    }
+
+    saveUrl = URL.createObjectURL(blob);
+    recSave.href = saveUrl;
+    recSave.download = "character." + kind;
+    recSave.hidden = false;
+    recInfo.textContent = kind + ", " + (blob.size / 1048576).toFixed(1) + " MB";
   }
 
   function stopRecording() {
@@ -1572,16 +1758,31 @@
       return;
     }
     if (!recorder) return;
+
+    var rec = recorder;
+    recorder = null;
     phase = "";
     if (phaseTimer) { clearTimeout(phaseTimer); phaseTimer = 0; }
     if (drawing) { cancelAnimationFrame(drawing); drawing = 0; }
     if (painting) { clearInterval(painting); painting = 0; }
     setPlaying(false);
     recInfo.textContent = "saving";
-    try { recorder.stop(); } catch (err) {}
-    recorder = null;
     recBtn.classList.remove("is-live");
     recLabel.textContent = "Record";
+
+    /* A recorder that has already given up is inactive, and stop() on one of
+       those throws instead of firing onstop. Either way, finish from whatever
+       it managed to write. */
+    if (rec.state === "inactive") {
+      finishRecording(rec);
+      return;
+    }
+
+    try {
+      rec.stop();
+    } catch (err) {
+      finishRecording(rec);
+    }
   }
 
   recBtn.addEventListener("click", function () {

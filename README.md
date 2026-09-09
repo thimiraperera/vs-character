@@ -230,7 +230,16 @@ to start the track, and since the clock is the track's own position that would
 leave the take frozen at zero with nothing to end it.
 
 Chrome writes MP4 with H.264 and AAC; browsers without it fall back to WebM, and
-the file is named to match. The audio is tapped from the same element that is
+the file is named to match. A browser can say yes to a format and still refuse
+it once a real stream is attached, most often H.264 on a machine without the
+encoder, so each format is tried for real, in order, until one starts. A take
+that dies part way through says so and keeps whatever was written before it
+went, and data lands every half second rather than all at the end, so a take
+cut short still leaves most of itself behind.
+
+It all runs in the browser. GitHub Pages only serves the files; the video is
+built on your machine and saved from there, and nothing is uploaded anywhere.
+Verified on the live site: a 1080 x 1920 MP4 with its audio track. The audio is tapped from the same element that is
 playing, so picture and voice come out of one clock and stay together.
 
 Captions are the exception to the painting: rather than reimplementing text
@@ -259,6 +268,11 @@ the nudge buttons for a tenth of a second at a time. Delete removes the selected
 one. Clicking the ruler scrubs, which applies the track at that moment so a
 change can be checked in place.
 
+Scrolling over the timeline zooms it, up to 40x, about the moment under the
+pointer so that moment stays put while the strip stretches around it. The ruler
+re-ticks for what is on screen, down to quarter seconds, and a playhead that
+runs off the edge brings the view along with it.
+
 **Record** replays the track into the video, and disarms Capture first so the
 take cannot rewrite the thing it is playing. With no audio, a recording runs to
 the last keyframe rather than stopping early.
@@ -267,6 +281,37 @@ The canvas works the dissolve between two pictures out from when it started
 rather than reading it back off the elements. Reading it back tied the recording
 to how far the browser had got with a CSS transition, and a window that is not
 being drawn does not advance one at all, which put blank squares in the file.
+
+## Blinks and the mouth
+
+The character blinks on her own every few seconds, now and then in a quick
+pair, and keeps doing so while paused so she looks alive in the held frames at
+either end of a recording. While a subtitle line is on screen and the clock is
+running, her mouth moves, stepping between frames at an uneven pace so it does
+not look mechanical. Both are drawn into the recording. Neither is a keyframe;
+they happen on their own.
+
+They need frames the artwork does not have yet: next to each pose file,
+`<pose>-blink.png` with the eyes shut, `<pose>-talk.png` with the mouth open,
+and optionally `<pose>-talk2.png` wider still. A pose without them simply does
+not blink or speak. Until they exist the console shows a 404 for each missing
+one; that is the app checking.
+
+`face-generation-guide.md` says how to make them. The one rule is that each is
+the pose file with only the face changed and every other pixel identical, which
+means editing the base in place rather than generating afresh: a fresh
+generation moves every outline by a pixel or two, and the app shows that as
+the whole character shimmering on each blink. Whether a frame passes that rule
+is measurable:
+
+```bash
+python tools/check-faces.py
+```
+
+It reports how much of each frame differs from its base and where, and passes
+only a small change that sits inside the head. Tested with a face-only edit,
+which passed at 0.2%, and a whole-image nudge standing in for a regeneration,
+which failed at 62.9%.
 
 ## Canvas
 

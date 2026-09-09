@@ -880,3 +880,25 @@ body{
 }
 
 .timeline .note{ text-align: left; margin-top: 10px; }
+
+
+/* ---------- timeline zoom ---------- */
+
+/* The grid scrolls sideways; the strip inside it is as wide as the zoom asks. */
+.tl-grid{
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #2b3342 transparent;
+}
+
+.tl-grid::-webkit-scrollbar{ height: 8px; }
+.tl-grid::-webkit-scrollbar-thumb{
+  border-radius: 4px;
+  background: #2b3342;
+}
+
+.tl-zoom{
+  position: relative;
+  min-width: 100%;
+}
