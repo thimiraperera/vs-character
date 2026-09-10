@@ -184,6 +184,7 @@
     stageHolder.style.width = Math.round(canvasW * k) + "px";
     stageHolder.style.height = Math.round(canvasH * k) + "px";
     scaleNote.textContent = canvasW + " x " + canvasH + " at " + Math.round(k * 100) + "%";
+    measureNames();
   }
 
   function applyResolution() {
@@ -244,7 +245,12 @@
        output size and only scaled for viewing, so this is already in canvas
        pixels. It has to be read after the class lands or a hidden box measures
        as nothing. */
-    var band = any ? 16 + nameBox.offsetHeight : 0;
+    /* A box that measures nothing is a box that is not laid out, not a box
+       with nothing in it, so it claims no room until it can be measured for
+       real. applyScale calls this again on every resize, which is when that
+       happens. */
+    var tall = nameBox.offsetHeight;
+    var band = (any && tall) ? 16 + tall : 0;
     document.documentElement.style.setProperty("--name-band", band + "px");
   }
 
