@@ -26,6 +26,10 @@ TARGET = os.path.join(ROOT, "vs-character", "script.js")
 # in a function of its own and gets a scope with it.
 FUNCTION = re.compile(r"^  function ([A-Za-z_$][\w$]*)\s*\(")
 VARIABLE = re.compile(r"^  var ([A-Za-z_$][\w$]*)\s*[=;]")
+# A loop counter declared at the top level shares the scope with everything
+# else in it, and the pattern above cannot see one: it wants = or ; straight
+# after the name, where a for header has "in" or a comparison.
+LOOPVAR = re.compile(r"^  for \(\s*var ([A-Za-z_$][\w$]*)")
 
 
 def main():
@@ -36,7 +40,8 @@ def main():
     seen = {}
     with open(TARGET, encoding="utf-8") as handle:
         for number, line in enumerate(handle, 1):
-            for pattern, kind in ((FUNCTION, "function"), (VARIABLE, "var")):
+            for pattern, kind in ((FUNCTION, "function"), (VARIABLE, "var"),
+                                  (LOOPVAR, "loop var")):
                 found = pattern.match(line)
                 if found:
                     seen.setdefault(found.group(1), []).append((number, kind))

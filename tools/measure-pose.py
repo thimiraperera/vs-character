@@ -9,8 +9,8 @@ empty padding each artwork happens to carry:
     --fb   gap under the soles / artwork height  (drives the ground line)
 
 Usage:
-    python tools/measure-pose.py vs-character/standing/standing.png
-    python tools/measure-pose.py vs-character/*/*.png
+    python tools/measure-pose.py artwork-masters/standing/standing.png
+    python tools/measure-pose.py artwork-masters/*/*.png
 """
 
 import glob

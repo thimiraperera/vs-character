@@ -7,4 +7,5 @@ __pycache__/
 # Delete these two lines if you want them versioned.
 pose-drafts-*/
 mouth-generation-*/
+artwork-fixes-*/
 vs-character/character.psd

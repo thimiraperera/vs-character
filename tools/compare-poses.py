@@ -14,7 +14,7 @@ and compares each to the master, passing or failing against a tolerance.
     python tools/compare-poses.py
     python tools/compare-poses.py --master standing --tolerance 1.5
 
-Reads PNGs with the standard library only.
+Reads the PNG masters under artwork-masters/ with the standard library only.
 """
 
 import argparse
@@ -23,7 +23,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ART = os.path.join(ROOT, "vs-character")
+ART = os.path.join(ROOT, "artwork-masters")
 POSES = ["standing", "pointing-left", "pointing-right", "shrugging", "arms-folded"]
 
 ALPHA = 32

@@ -26,8 +26,6 @@
     <div class="stage" id="stage">
 
       <div class="sky"></div>
-      <div class="glow"></div>
-      <div class="floor"></div>
 
       <div class="slots">
         <div class="slot" data-slot="a" title="Click for the next image">
@@ -59,14 +57,19 @@
         </div>
       </div>
 
+      <div class="slot-names">
+        <div class="slot-name" id="nameA"></div>
+        <div class="slot-name" id="nameB"></div>
+      </div>
+
       <div class="cast-shadow" id="castShadow"></div>
 
       <div class="character" id="character">
-        <img class="pose is-on" data-pose="standing"       src="standing/standing.png"             alt="Character standing" fetchpriority="high">
-        <img class="pose"       data-pose="pointing-left"  src="pointing-left/pointing-left.png"   alt="Character pointing left">
-        <img class="pose"       data-pose="pointing-right" src="pointing-right/pointing-right.png" alt="Character pointing right">
-        <img class="pose"       data-pose="shrugging"      src="shrugging/shrugging.png"           alt="Character shrugging">
-        <img class="pose"       data-pose="arms-folded"    src="arms-folded/arms-folded.png"       alt="Character with arms folded">
+        <img class="pose is-on" data-pose="standing"       src="standing/standing.webp"             alt="Character standing" fetchpriority="high">
+        <img class="pose"       data-pose="pointing-left"  src="pointing-left/pointing-left.webp"   alt="Character pointing left">
+        <img class="pose"       data-pose="pointing-right" src="pointing-right/pointing-right.webp" alt="Character pointing right">
+        <img class="pose"       data-pose="shrugging"      src="shrugging/shrugging.webp"           alt="Character shrugging">
+        <img class="pose"       data-pose="arms-folded"    src="arms-folded/arms-folded.webp"       alt="Character with arms folded">
       </div>
 
       <div class="subtitle" id="subtitle">
@@ -140,6 +143,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
         </button>
       </div>
+      <label class="field field-name">
+        <span>Name under the left square</span>
+        <input id="nameFieldA" type="text" maxlength="60" autocomplete="off" spellcheck="false">
+      </label>
 
       <div class="row row-gap">
         <span class="row-key">2</span>
@@ -152,6 +159,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
         </button>
       </div>
+      <label class="field field-name">
+        <span>Name under the right square</span>
+        <input id="nameFieldB" type="text" maxlength="60" autocomplete="off" spellcheck="false">
+      </label>
 
       <p class="note">Click a square for the next image, or the arrow badge on it to add more.</p>
 

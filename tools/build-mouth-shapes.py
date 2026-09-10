@@ -21,7 +21,7 @@ def main():
     sheet=Image.new('RGB',(1200,800),'#ffffff')
     draw=ImageDraw.Draw(sheet)
     for row,(pose,box) in enumerate(BOXES.items()):
-        folder=ROOT/'vs-character'/pose
+        folder=ROOT/'artwork-masters'/pose
         base=Image.open(folder/(pose+'.png')).convert('RGBA')
         a=np.array(base)
         x0,y0,x1,y1=box

@@ -11,7 +11,9 @@ and passes it only when the change is small and sits inside the head.
 
     python tools/check-faces.py
 
-Reads PNGs with the standard library only.
+Reads the PNG masters under artwork-masters/ with the standard library
+only. Not the webp the app ships: those are built from these, and
+build-webp.py is what proves the copies faithful.
 """
 
 import importlib.util
@@ -19,7 +21,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ART = os.path.join(ROOT, "vs-character")
+ART = os.path.join(ROOT, "artwork-masters")
 POSES = ["standing", "pointing-left", "pointing-right", "shrugging", "arms-folded"]
 KINDS = ["blink", "talk", "talk2", "talk-a", "talk-e", "talk-o", "talk-m", "talk-s"]
 
@@ -136,8 +138,11 @@ def main():
 
     print()
     if not found:
-        print("No blink or mouth frames found yet. See mouth-generation-guide.md.")
-        return 0
+        # Silence used to mean "none drawn yet". There are 35 of them now, so
+        # silence means this is looking in the wrong place, and saying so
+        # beats congratulating a run that checked nothing.
+        print("No blink or mouth frames found under %s" % ART)
+        return 1
     if failures:
         print("%d frame(s) are not the base with only the face changed." % failures)
         return 1

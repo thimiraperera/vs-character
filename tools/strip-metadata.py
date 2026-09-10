@@ -16,7 +16,10 @@ Neither affects a single rendered pixel, so removing them is lossless.
     python tools/strip-metadata.py --apply         rewrite, keeping backups
 
 --apply copies every original to originals/ next to this repo's README before
-touching anything, so the folder structure under vs-character stays as it is.
+touching anything, so the folder structure under artwork-masters stays as it
+is. It reads the masters, not the webp the app ships: those are a different
+container with no png chunks in them, and Pillow writes no metadata into them
+in the first place. Rebuild with build-webp.py after stripping.
 """
 
 import os
@@ -58,12 +61,20 @@ def main(argv):
     touched = []
 
     for pose in POSES:
-        path = os.path.join(ROOT, "vs-character", pose, pose + ".png")
+        path = os.path.join(ROOT, "artwork-masters", pose, pose + ".png")
         if not os.path.isfile(path):
             print("missing: %s" % path)
             continue
 
         data = open(path, "rb").read()
+
+        # This walks png chunks and writes back what it kept. Pointed at any
+        # other container it would read one bogus chunk spanning the whole
+        # file, call it metadata, and write back an eight byte header.
+        if not data.startswith(bytes([137, 80, 78, 71, 13, 10, 26, 10])):
+            print("%-15s skipped, not a png" % pose)
+            continue
+
         kept, dropped = [data[:8]], []
         for kind, blob in chunks(data):
             if kind in KEEP:

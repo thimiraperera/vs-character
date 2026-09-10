@@ -68,6 +68,40 @@ where neither one covers the square and the backdrop shows through the pair of
 them: at the midpoint of a 50/50 fade a quarter of the background comes through,
 and that is what reads as the picture vanishing before the next appears.
 
+## A name under each square
+
+Each square can carry a name underneath it, typed in the panel beside its own
+Add images button. It appears under that square in the same two columns, so a
+name always lands under the picture it belongs to, and it goes into the
+recording like everything else on the canvas. Sinhala and Latin both work, and
+a long one wraps.
+
+The names are drawn through the same rasteriser as the captions: the real
+elements are handed back to the browser inside an SVG with the Sinhala face
+embedded, so what lands in the video is laid out by the CSS that placed it on
+screen rather than by a second copy of those rules that could drift.
+
+The band they take up is measured and published as `--name-band`, and the
+caption band below starts under it. With no names it is zero and nothing moves.
+
+## The backdrop
+
+Plain white, and nothing else. There was a sky gradient, a warm glow behind the
+character and a shaded floor; all three are gone, element and paint code alike.
+White composites cleanly against anything, and a flat frame costs the encoder
+almost nothing: a twelve second take that ran to about 1.2 MB comes out at
+0.1 MB.
+
+Two things kept a tint against it. An empty square used to be a wash of white
+over a blue sky, which over white would be nothing at all, so it takes a faint
+grey and a slightly firmer edge; a filled square covers it anyway. And the
+shadow under her feet stays, because without it she floats, but its blue came
+from a sky that is no longer there, so it is neutral now.
+
+The backdrop is painted twice, once as CSS for the screen and again onto the
+canvas for the recording, so both were changed together. A recorded frame reads
+255,255,255 straight across the top strip and into the bottom corners.
+
 ## Audio
 
 Load an `.mp3`, `.wav`, or anything else the browser plays. Like the images it
@@ -315,12 +349,12 @@ not look mechanical. Both are drawn into the recording. Neither is a keyframe;
 they happen on their own.
 
 The blink frames are in. The mouth reads from up to five shapes beside each
-pose, `<pose>-talk-a.png` through `<pose>-talk-s.png`, and picks among whichever
+pose, `<pose>-talk-a.webp` through `<pose>-talk-s.webp`, and picks among whichever
 exist: never the same one twice running, each held 70 to 130ms, with the odd
 closed beat standing in for a gap between words. It is not lip sync, since
 nothing reads the audio; the variety is what stops it looking counted out.
 
-The older single `<pose>-talk.png` still works, so a pose without the named
+The older single `<pose>-talk.webp` still works, so a pose without the named
 shapes falls back to it rather than going still. Once a pose has any named
 shape its old file is ignored and can be deleted.
 
@@ -378,20 +412,32 @@ recording area.
 ## Layout
 
 ```
-vs-character/
+artwork-masters/            the drawings at full size, never loaded by the app
+  standing/standing.png
+  standing/standing-blink.png
+  standing/standing-talk-a.png          and the rest of the mouths
+  pointing-left/ ...
+  pointing-right/ ...
+  shrugging/ ...
+  arms-folded/ ...
+
+vs-character/               everything the page loads
   index.html
   style.css
   script.js
-  standing/standing.png
-  pointing-left/pointing-left.png
-  pointing-right/pointing-right.png
-  shrugging/shrugging.png
-  arms-folded/arms-folded.png
+  standing/standing.webp
+  standing/standing-blink.webp
+  standing/standing-talk-a.webp         and the rest of the mouths
+  pointing-left/ ...
+  pointing-right/ ...
+  shrugging/ ...
+  arms-folded/ ...
   pro-pic.jpg
 ```
 
-The original folder layout is untouched; each pose is referenced where it
-already lives.
+Each pose still sits in its own folder under the name it always had; only the
+extension changed. The masters beside them are the same pictures at full size,
+kept so the drawings never have to be recovered from the files the app ships.
 
 Measurements inside the canvas, at every resolution:
 
@@ -400,6 +446,7 @@ Measurements inside the canvas, at every resolution:
 | squares start | 48px from the top |
 | square gaps | 24px left, right, and between |
 | square shape | square, so each is `(width - 72) / 2` across |
+| name band | 16px under the squares, only while a name is typed |
 | character height | 45% of the canvas height |
 | ground clearance | 16px under the feet |
 
@@ -428,6 +475,39 @@ Poses cut rather than cross-fade. Dissolving two bodies that stand in slightly
 different places reads as a double exposure instead of one character moving. The
 image squares do cross-fade, because there the dissolve is the point.
 
+## Masters and what ships
+
+The drawings are 1024x1536 with a lot of transparency, and as PNG the forty of
+them came to 45 MB. Every one is loaded when the page opens, so that was 45 MB
+before the first frame. They ship as lossless WebP now, 19 MB for the set, and
+the PNG masters sit beside them in `artwork-masters/` where nothing fetches
+them.
+
+```bash
+python tools/build-webp.py            # rebuild after the drawings change
+python tools/build-webp.py --check    # verify what is shipped, write nothing
+```
+
+Lossless rather than lossy, and the reason is the faces. A frame is its pose
+with only the face changed, and the app lays one over the other. A lossy codec
+compresses the identical parts of the two files differently, because a block
+predicts from its neighbours and that chain carries a change at the mouth a
+long way out from it, so the body would shimmer on every blink. Lossless hands
+the app back what was drawn.
+
+One thing does change on the way through. Three quarters of each frame is fully
+transparent, and most of those clear pixels still carry a colour underneath;
+WebP drops it unless told otherwise, and keeping it costs 20% more file for
+pixels nothing can see. A browser premultiplies on decode, so colour under zero
+alpha is multiplied out before it is drawn with. So the check the build runs is
+the one that matters rather than the one that is easy: every visible pixel
+identical, and the alpha channel identical everywhere. A file that fails it is
+not written.
+
+The tools all read the masters. They decode PNG by hand with the standard
+library and cannot read WebP at all, which is fine, since the masters are what
+they are for. `tools/build-webp.py` is the one that needs Pillow.
+
 ## Regenerating the artwork
 
 The set was redrawn to one scale. Every pose now rests on the same ground line
@@ -450,16 +530,22 @@ ground line and centre line, so results are judged by numbers rather than eye.
 
 ## Adding a pose
 
-1. Drop `vs-character/<name>/<name>.png` in place (8-bit RGBA).
+1. Drop `artwork-masters/<name>/<name>.png` in place (8-bit RGBA).
 2. Measure it:
 
    ```bash
-   python tools/measure-pose.py "vs-character/<name>/<name>.png"
+   python tools/measure-pose.py "artwork-masters/<name>/<name>.png"
    ```
 
    It prints the CSS line to paste beside the others in `style.css`.
-3. Add the `<img class="pose" data-pose="<name>" ...>` tag in `index.html`.
-4. Map a key to it in the `KEY_POSES` table in `script.js`.
+3. Build what the app will load:
+
+   ```bash
+   python tools/build-webp.py
+   ```
+4. Add the `<img class="pose" data-pose="<name>" src="<name>/<name>.webp" ...>`
+   tag in `index.html`.
+5. Map a key to it in the `KEY_POSES` table in `script.js`.
 
 `tools/measure-pose.py` decodes PNGs with the standard library only, so it needs
 no packages. Re-running it against the current artwork reproduces the committed
@@ -485,33 +571,30 @@ packages.
 
 ## Metadata in the artwork (read before posting)
 
-The PNGs carry metadata that has nothing to do with the pixels:
-
-| file | chunk | contents |
-| --- | --- | --- |
-| `standing.png` | `caBX` 21.8 KB | signed C2PA credential: `gpt-image 2.0`, `digitalSourceType: trainedAlgorithmicMedia` |
-| `pointing-left.png` | `iTXt` 1.3 KB | Photoshop XMP: edit history, document UUIDs, local timestamps |
-| `pointing-right.png` | `iTXt` 1.5 KB | same |
-| `arms-folded.png` | `iTXt` 1.3 KB | same |
-| `shrugging.png` | none | already clean |
-
-The first row is the one that matters. A C2PA manifest is a signed,
-machine-readable declaration that the image was generated by a model, and
+A file out of an image model can carry a signed C2PA credential saying so, and
 Instagram, Facebook, LinkedIn and TikTok read it to attach a "Made with AI"
-label automatically. It rides on `standing.png`, the default pose and the frame
-most likely to be on screen.
+label on their own. So the artwork is worth checking before a set goes up.
 
-To inspect or remove it:
+As the masters stand today there is no such credential on any of them. What the
+five base poses carry is Photoshop XMP, between 1.6 and 3.3 KB each: edit
+history, document UUIDs and local timestamps from the retouching, naming no
+generator. The 35 face frames are clean, because they are composited by
+`tools/build-mouth-shapes.py` and `tools/apply-artwork-fixes.py`, which write
+pixels and nothing else.
+
+The webp files the app ships inherit none of it either way. Pillow writes only
+the picture.
+
+To check the masters, or to strip them:
 
 ```bash
 python tools/strip-metadata.py           # report only, changes nothing
 python tools/strip-metadata.py --apply   # rewrite, originals copied to originals/
 ```
 
-Stripping is lossless: only the metadata chunks go, every pixel is byte for byte
-identical, and `--apply` copies each original into `originals/` first. Verified
-on a scratch copy before the tool shipped. Nothing has been stripped yet, so the
-artwork is exactly as supplied.
+Stripping is lossless: only the metadata chunks go, every pixel is byte for
+byte identical, and `--apply` copies each original into `originals/` first.
+Nothing has been stripped, since nothing on them says how they were made.
 
 ## Tuning
 

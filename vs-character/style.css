@@ -21,6 +21,9 @@
   --edge: 24px;
   --slot-top: 48px;
 
+  /* Room taken by the names under the squares. Zero until one is typed. */
+  --name-band: 0px;
+
   /* How quickly one slot image dissolves into the next. */
   --slot-fade: 140ms;
 
@@ -106,29 +109,7 @@ body{
 .sky{
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, #cfe9ff 0%, #e6f1fb 42%, #fdf3e6 100%);
-}
-
-.glow{
-  position: absolute;
-  left: 50%;
-  bottom: 18%;
-  width: 132%;
-  aspect-ratio: 1;
-  transform: translateX(-50%);
-  background: radial-gradient(circle at 50% 50%,
-              rgba(255,236,196,.95) 0%,
-              rgba(255,236,196,.45) 38%,
-              rgba(255,236,196,0) 68%);
-}
-
-.floor{
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 26%;
-  background: linear-gradient(180deg, rgba(126,150,178,0) 0%, rgba(126,150,178,.16) 60%, rgba(96,120,150,.26) 100%);
+  background: #ffffff;
 }
 
 /* ---------- the two comparison slots ---------- */
@@ -148,12 +129,12 @@ body{
   aspect-ratio: 1;
   border-radius: 18px;
   overflow: hidden;
-  background: rgba(255,255,255,.55);
-  box-shadow: 0 0 0 1px rgba(23,32,58,.10), 0 10px 26px rgba(30,45,70,.10);
+  background: #f1f3f6;
+  box-shadow: 0 0 0 1px rgba(23,32,58,.14), 0 10px 26px rgba(30,45,70,.08);
   cursor: pointer;
 }
 
-.slot.is-over{ box-shadow: 0 0 0 3px #2f7fd8, 0 10px 26px rgba(30,45,70,.16); }
+.slot.is-over{ box-shadow: 0 0 0 3px #2f7fd8, 0 10px 26px rgba(30,45,70,.12); }
 
 .slot-stack{
   position: absolute;
@@ -214,6 +195,35 @@ body{
 .slot.is-filled .slot-clear{ display: grid; }
 .slot.is-filled:hover .slot-clear{ opacity: 1; }
 
+/* ---------- the name written under each square ---------- */
+
+.slot-names{
+  position: absolute;
+  z-index: 4;
+  top: calc(var(--slot-top) + (var(--w) * 1px - 3 * var(--edge)) / 2 + 16px);
+  left: var(--edge);
+  right: var(--edge);
+  display: none;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--edge);
+}
+
+.slot-names.has-text{ display: grid; }
+
+.slot-name{
+  min-width: 0;
+  font-family: UN-Sandhyanee, "Segoe UI", Roboto, sans-serif;
+  /* Tied to the canvas width the way every other stage measurement is: 40px
+     at 1080 wide, and the same share of the frame at 720, where a fixed size
+     would wrap a two word name onto three lines. */
+  font-size: calc(var(--w) * 0.037px);
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: center;
+  color: var(--ink);
+  overflow-wrap: break-word;
+}
+
 /* ---------- character ---------- */
 
 .cast-shadow{
@@ -224,7 +234,7 @@ body{
   height: 3.6%;
   transform: translateX(-50%);
   border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 50%, rgba(40,55,80,.42) 0%, rgba(40,55,80,.20) 45%, rgba(40,55,80,0) 72%);
+  background: radial-gradient(ellipse at 50% 50%, rgba(23,32,58,.26) 0%, rgba(23,32,58,.12) 45%, rgba(23,32,58,0) 72%);
   transition: width .18s ease;
 }
 
@@ -287,7 +297,7 @@ body{
   z-index: 5;
   left: var(--edge);
   right: var(--edge);
-  top: calc(var(--slot-top) + (var(--w) * 1px - 3 * var(--edge)) / 2);
+  top: calc(var(--slot-top) + (var(--w) * 1px - 3 * var(--edge)) / 2 + var(--name-band));
   bottom: calc(var(--floor) + var(--char-height));
   display: none;
   padding: 16px 0;
@@ -428,6 +438,23 @@ body{
 }
 
 .field select:focus-visible{ outline: 2px solid #2f7fd8; outline-offset: 1px; }
+
+/* Sits under its own row of buttons rather than against them. */
+.field-name{ margin-top: 10px; }
+
+.field input[type="text"]{
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 9px;
+  background: #1e2531;
+  color: #e7ecf4;
+  font: inherit;
+  font-size: 13px;
+}
+
+.field input[type="text"]::placeholder{ color: #5d6879; }
+.field input[type="text"]:focus-visible{ outline: 2px solid #2f7fd8; outline-offset: 1px; }
 
 #scaleNote{ text-align: left; }
 

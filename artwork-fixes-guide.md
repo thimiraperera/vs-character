@@ -14,8 +14,8 @@ generate a donor face and composite only the masked region the way
 
 ## 1. The shrug is unhappy
 
-`vs-character/shrugging/shrugging.png` reads as upset rather than playful. Two
-things do it:
+`artwork-masters/shrugging/shrugging.png` reads as upset rather than playful.
+Two things do it:
 
 - the **eyebrows** slant up towards the middle of the face, which is the
   standard drawing of worry or sadness
@@ -159,3 +159,13 @@ python tools/strip-metadata.py --apply
 ```
 
 Lossless, and it keeps a copy of each original in `originals/`.
+
+Then rebuild what the app loads, since it ships webp copies of these:
+
+```bash
+python tools/build-webp.py
+```
+
+Every file is decoded again on the way out and compared to its master, so a
+copy that came back different is a failure rather than a warning.
+

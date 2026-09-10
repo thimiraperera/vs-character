@@ -23,7 +23,7 @@ def build():
     reports=[]
     preview=Image.new('RGB',(1500,1050),'#ffffff')
     for row,(pose,(source_id,eyes,mouth)) in enumerate(SPECS.items()):
-        folder=ROOT/'vs-character'/pose
+        folder=ROOT/'artwork-masters'/pose
         base=Image.open(folder/(pose+'.png')).convert('RGBA')
         a=np.array(base)
         donor_path=WORK/(pose+'-donor.png')

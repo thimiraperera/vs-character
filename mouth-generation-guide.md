@@ -125,3 +125,13 @@ python tools/strip-metadata.py --apply
 ```
 
 Lossless, and it keeps a copy of each original in `originals/`.
+
+Then rebuild what the app loads, since it ships webp copies of these:
+
+```bash
+python tools/build-webp.py
+```
+
+Every file is decoded again on the way out and compared to its master, so a
+copy that came back different is a failure rather than a warning.
+

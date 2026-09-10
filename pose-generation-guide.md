@@ -1,7 +1,7 @@
 # Regenerating the pose set
 
 Instructions for producing a matched set of pose images for the character, with
-`vs-character/standing/standing.png` as the fixed master reference. Everything
+`artwork-masters/standing/standing.png` as the fixed master reference. Everything
 below is written so it can be pasted into an image generation model along with
 that file.
 
@@ -154,7 +154,7 @@ A pose that fails is regenerated, not corrected in the app.
 Then measure the passing set for the app's registration constants:
 
 ```bash
-python tools/measure-pose.py "vs-character/*/*.png"
+python tools/measure-pose.py "artwork-masters/*/*.png"
 ```
 
 and paste the output over the five `.pose[data-pose=...]` lines in
@@ -172,3 +172,13 @@ python tools/strip-metadata.py --apply
 ```
 
 It is lossless and keeps a copy of each original in `originals/`.
+
+Then rebuild what the app loads, since it ships webp copies of these:
+
+```bash
+python tools/build-webp.py
+```
+
+Every file is decoded again on the way out and compared to its master, so a
+copy that came back different is a failure rather than a warning.
+

@@ -193,6 +193,7 @@
     document.documentElement.style.setProperty("--w", canvasW);
     document.documentElement.style.setProperty("--h", canvasH);
     applyScale();
+    measureNames();
   }
 
   /* Resizing the window moves two things at once: the room available, and how
@@ -222,6 +223,53 @@
 
   applyResolution();
   scheduleScale();
+
+  /* ---------- the name written under each square ---------- */
+
+  /* Typed in the panel, shown under its own square, and drawn into a recording
+     by the same rasteriser that draws the captions. The band the names take up
+     is published as a variable, so the caption below moves down by exactly as
+     much as they occupy rather than by a guess. */
+  var nameFields = { a: document.getElementById("nameFieldA"), b: document.getElementById("nameFieldB") };
+  var nameLabels = { a: document.getElementById("nameA"), b: document.getElementById("nameB") };
+  var nameBox = document.querySelector(".slot-names");
+
+  function measureNames() {
+    /* Load bearing: applyResolution calls this while the page is starting up,
+       which is before the line below that looks the box up has run. */
+    if (!nameBox) return;
+    var any = nameLabels.a.textContent !== "" || nameLabels.b.textContent !== "";
+    nameBox.classList.toggle("has-text", any);
+    /* offsetHeight is layout pixels, and the stage is laid out at its real
+       output size and only scaled for viewing, so this is already in canvas
+       pixels. It has to be read after the class lands or a hidden box measures
+       as nothing. */
+    var band = any ? 16 + nameBox.offsetHeight : 0;
+    document.documentElement.style.setProperty("--name-band", band + "px");
+  }
+
+  function applySlotName(which) {
+    var field = nameFields[which];
+    if (!field) return;
+
+    /* Control characters can arrive with a paste, and one of them inside the
+       svg makes the whole document unparseable rather than just ugly: the
+       raster fails to load and the take quietly loses its caption with it. */
+    nameLabels[which].textContent = field.value.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+
+    measureNames();
+    buildCaption();
+  }
+
+  for (var sn in nameFields) {
+    if (Object.prototype.hasOwnProperty.call(nameFields, sn)) {
+      (function (which) {
+        var field = nameFields[which];
+        if (!field) return;
+        field.addEventListener("input", function () { applySlotName(which); });
+      })(sn);
+    }
+  }
 
   /* ---------- image slots ---------- */
 
@@ -1163,15 +1211,16 @@
      the face changed, so it lies over the base at the same registration and
      covers it exactly:
 
-       <pose>-blink.png     eyes shut
-       <pose>-talk-a.png    mouth wide open
-       <pose>-talk-e.png    mid open, corners wide
-       <pose>-talk-o.png    small and rounded
-       <pose>-talk-m.png    lips together
-       <pose>-talk-s.png    narrow, upper teeth
+       <pose>-blink.webp     eyes shut
+       <pose>-talk-a.webp    mouth wide open
+       <pose>-talk-e.webp    mid open, corners wide
+       <pose>-talk-o.webp    small and rounded
+       <pose>-talk-m.webp    lips together
+       <pose>-talk-s.webp    narrow, upper teeth
 
      A pose with none of them simply does not blink or speak, and one with only
-     the older <pose>-talk.png still works from that. */
+     the older <pose>-talk.webp still works from that. The drawings themselves
+     are png, kept in artwork-masters/; build-webp.py makes these from them. */
   var MOUTH_SHAPES = ["talk-a", "talk-e", "talk-o", "talk-m", "talk-s"];
   var OLDER_MOUTHS = ["talk", "talk2"];
 
@@ -1211,7 +1260,7 @@
     });
 
     img.addEventListener("error", function () { if (onSettled) onSettled(); });
-    img.src = pose + "/" + pose + "-" + suffix + ".png";
+    img.src = pose + "/" + pose + "-" + suffix + ".webp";
   }
 
   function loadFaces(pose) {
@@ -1303,8 +1352,6 @@
   var brush = frame.getContext("2d");
 
   var skyEl = document.querySelector(".sky");
-  var glowEl = document.querySelector(".glow");
-  var floorEl = document.querySelector(".floor");
   var slotEls = document.querySelectorAll(".slot");
 
   function boxOf(el) {
@@ -1346,29 +1393,8 @@
 
     brush.clearRect(0, 0, canvasW, canvasH);
 
-    var sky = brush.createLinearGradient(0, 0, 0, canvasH);
-    sky.addColorStop(0, "#cfe9ff");
-    sky.addColorStop(0.42, "#e6f1fb");
-    sky.addColorStop(1, "#fdf3e6");
-    brush.fillStyle = sky;
+    brush.fillStyle = "#ffffff";
     brush.fillRect(0, 0, canvasW, canvasH);
-
-    var g = boxOf(glowEl);
-    var gx = g.x + g.w / 2, gy = g.y + g.h / 2;
-    var glow = brush.createRadialGradient(gx, gy, 0, gx, gy, g.w / 2);
-    glow.addColorStop(0, "rgba(255,236,196,.95)");
-    glow.addColorStop(0.38, "rgba(255,236,196,.45)");
-    glow.addColorStop(0.68, "rgba(255,236,196,0)");
-    brush.fillStyle = glow;
-    brush.fillRect(g.x, g.y, g.w, g.h);
-
-    var f = boxOf(floorEl);
-    var floor = brush.createLinearGradient(0, f.y, 0, f.y + f.h);
-    floor.addColorStop(0, "rgba(126,150,178,0)");
-    floor.addColorStop(0.6, "rgba(126,150,178,.16)");
-    floor.addColorStop(1, "rgba(96,120,150,.26)");
-    brush.fillStyle = floor;
-    brush.fillRect(f.x, f.y, f.w, f.h);
 
     for (var i = 0; i < slotEls.length; i++) {
       var el = slotEls[i];
@@ -1376,11 +1402,11 @@
       var radius = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
 
       brush.save();
-      brush.shadowColor = "rgba(30,45,70,.10)";
+      brush.shadowColor = "rgba(30,45,70,.08)";
       brush.shadowBlur = 26;
       brush.shadowOffsetY = 10;
       roundedPath(b.x, b.y, b.w, b.h, radius);
-      brush.fillStyle = el.classList.contains("is-filled") ? "#ffffff" : "rgba(255,255,255,.55)";
+      brush.fillStyle = el.classList.contains("is-filled") ? "#ffffff" : "#f1f3f6";
       brush.fill();
       brush.restore();
 
@@ -1411,7 +1437,7 @@
 
       brush.save();
       roundedPath(b.x, b.y, b.w, b.h, radius);
-      brush.strokeStyle = "rgba(23,32,58,.10)";
+      brush.strokeStyle = "rgba(23,32,58,.14)";
       brush.lineWidth = 1;
       brush.stroke();
       brush.restore();
@@ -1422,9 +1448,9 @@
     brush.translate(sh.x + sh.w / 2, sh.y + sh.h / 2);
     brush.scale(sh.w / 2, sh.h / 2);
     var cast = brush.createRadialGradient(0, 0, 0, 0, 0, 1);
-    cast.addColorStop(0, "rgba(40,55,80,.42)");
-    cast.addColorStop(0.45, "rgba(40,55,80,.20)");
-    cast.addColorStop(0.72, "rgba(40,55,80,0)");
+    cast.addColorStop(0, "rgba(23,32,58,.26)");
+    cast.addColorStop(0.45, "rgba(23,32,58,.12)");
+    cast.addColorStop(0.72, "rgba(23,32,58,0)");
     brush.fillStyle = cast;
     brush.fillRect(-1, -1, 2, 2);
     brush.restore();
@@ -1480,7 +1506,7 @@
   }
 
   function rootVars() {
-    var names = ["--w", "--h", "--edge", "--slot-top", "--floor", "--char-height", "--breath"];
+    var names = ["--w", "--h", "--edge", "--slot-top", "--floor", "--char-height", "--breath", "--name-band"];
     var root = getComputedStyle(document.documentElement);
     var out = ":root{";
     for (var i = 0; i < names.length; i++) {
@@ -1489,12 +1515,18 @@
     return out + "}";
   }
 
+  function xmlText(raw) {
+    return raw.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
   function buildCaption() {
     var html = subtitle.classList.contains("has-text") ? subtitleText.innerHTML : "";
-    var key = html + "|" + canvasW + "x" + canvasH + "|" + cssBox.value;
+    var left = nameLabels.a.textContent;
+    var right = nameLabels.b.textContent;
+    var key = html + "|" + left + "|" + right + "|" + canvasW + "x" + canvasH + "|" + cssBox.value;
     if (key === captionKey) return;
 
-    if (!html) { captionKey = key; captionArt = null; return; }
+    if (!html && !left && !right) { captionKey = key; captionArt = null; return; }
 
     /* The stylesheet may still be on its way. Leave the key alone so this runs
        again once it lands, rather than marking the caption done. */
@@ -1509,14 +1541,26 @@
       : "";
 
     /* CDATA keeps the stylesheet away from the XML parser. */
-    var css = "<style><![CDATA[" + face + rootVars() + sheetText + cssBox.value + "]]></style>";
+    /* The live variables go in AFTER the stylesheet, not before it. The sheet
+       carries its own :root block with --w and --h written as the defaults,
+       and inside the svg both blocks select the same element with the same
+       weight, so whichever comes last wins. Ahead of it these were overruled
+       by the file and every raster laid itself out at 1080 x 1920 whatever the
+       canvas was actually set to. */
+    var css = "<style><![CDATA[" + face + sheetText + rootVars() + cssBox.value + "]]></style>";
 
     var doc =
       '<svg xmlns="http://www.w3.org/2000/svg" width="' + canvasW + '" height="' + canvasH + '">' +
       '<foreignObject x="0" y="0" width="' + canvasW + '" height="' + canvasH + '">' +
       '<div xmlns="http://www.w3.org/1999/xhtml" class="stage">' +
       css +
-      '<div class="subtitle has-text"><div class="subtitle-text">' + body + "</div></div>" +
+      (left || right
+        ? '<div class="slot-names has-text"><div class="slot-name">' + xmlText(left) +
+          '</div><div class="slot-name">' + xmlText(right) + "</div></div>"
+        : "") +
+      (html
+        ? '<div class="subtitle has-text"><div class="subtitle-text">' + body + "</div></div>"
+        : "") +
       "</div></foreignObject></svg>";
 
     var art = new Image();
@@ -1999,7 +2043,9 @@
   function captionReady(done) {
     var tries = 0;
     (function poll() {
-      if (!subtitle.classList.contains("has-text") || captionArt || tries > 25) { done(); return; }
+      var wanted = subtitle.classList.contains("has-text") ||
+                   nameLabels.a.textContent || nameLabels.b.textContent;
+      if (!wanted || captionArt || tries > 25) { done(); return; }
       tries++;
       setTimeout(poll, 20);
     })();
