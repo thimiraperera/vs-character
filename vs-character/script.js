@@ -1944,8 +1944,14 @@
   function startRun() {
     if (!recorder || phase !== "head") return;
     phase = "run";
-    recInfo.textContent = "recording " + canvasW + " x " + canvasH +
-      (voiceTracks.length ? " with audio" : ", no audio loaded");
+
+    /* Audio, subtitles or a track give the take an end of its own. With none of
+       them it runs until it is stopped by hand, so say so rather than sitting
+       on "recording" while it is waited out. */
+    recInfo.textContent = runLength()
+      ? "recording " + canvasW + " x " + canvasH + (voiceTracks.length ? " with audio" : "")
+      : "recording, press Stop when you are done";
+
     setPlaying(true);
   }
 
@@ -2172,6 +2178,13 @@
     recSave.download = "character." + kind;
     recSave.hidden = false;
     recInfo.textContent = kind + ", " + (blob.size / 1048576).toFixed(1) + " MB" + note;
+
+    /* Straight to the downloads folder, since that is the point of the take.
+       A browser set to refuse a download it did not see asked for will ignore
+       this, which is what the button underneath is still there for. */
+    try {
+      recSave.click();
+    } catch (err) {}
   }
 
   function stopRecording() {

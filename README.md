@@ -206,14 +206,22 @@ A take runs in three parts:
 | part | length |
 | --- | --- |
 | the opening frame, held | 3 seconds |
-| playback | the audio, or the last subtitle line when there is no audio |
+| playback | the audio, or the last subtitle line, or the keyframe track |
 | the closing frame, held | 3 seconds |
 
 So there is something to cut against at both ends. Playback starts when the
 opening handle finishes, not the moment the button is pressed. Pressing the
 button during playback ends the middle early but still runs the closing handle;
-pressing it again during that handle cuts it short. When it is done a **Save the
-video** button appears.
+pressing it again during that handle cuts it short.
+
+The middle part only knows how long it is if something tells it: an audio file,
+a subtitle file, or a keyframe track. With none of them loaded there is nothing
+to end the take, so it runs until it is stopped by hand, and the panel says so
+rather than sitting on "recording" while it is waited out.
+
+When it is done the file goes to the downloads folder on its own. A browser set
+to refuse a download nobody asked for will ignore that, which is what the **Save
+the video** button underneath is still there for.
 
 The frame is painted rather than screen-grabbed. Every part of the scene is
 measured off the live page, divided by the view scale to put it back into
@@ -329,10 +337,15 @@ python tools/check-faces.py
 ```
 
 It reports how much of each frame differs from its base and where, and passes
-only a small change that sits inside the head. The ten frames in the repo pass:
-blinks at 1.7 to 2.0% of the figure, mouths at 0.4 to 0.6%, every one of them
+only a small change that sits inside the head. All 35 frames in the repo pass:
+blinks at 1.7 to 2.0% of the figure, mouths at 0.1 to 0.9%, every one of them
 inside the head. A whole-image nudge standing in for a regeneration fails at
 62.9%.
+
+`artwork-fixes-guide.md` carries the two edits still owed to the drawings
+themselves: the shrug reads as sad rather than playful, and the `a` mouth opens
+wider than a spoken syllable. It names what to change, what each change costs
+elsewhere, and the numbers to judge the result by.
 
 ## Canvas
 

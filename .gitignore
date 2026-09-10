@@ -6,4 +6,5 @@ __pycache__/
 # Working files, kept local rather than pushed to a public repo.
 # Delete these two lines if you want them versioned.
 pose-drafts-*/
+mouth-generation-*/
 vs-character/character.psd
