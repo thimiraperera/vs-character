@@ -19,6 +19,7 @@
   var stageArea = document.getElementById("stageArea");
   var workspace = document.querySelector(".workspace");
   var deck = document.querySelector(".deck");
+  var board = document.querySelector(".board");
   var controls = document.querySelector(".controls");
   var timeline = document.getElementById("timeline");
   var castShadow = document.getElementById("castShadow");
@@ -152,6 +153,16 @@
   var canvasH = 1920;
   var viewK = 1;
 
+  function rowGapOf(el) {
+    var box = getComputedStyle(el);
+    return parseFloat(box.columnGap || box.gap) || 0;
+  }
+
+  function padXOf(el) {
+    var box = getComputedStyle(el);
+    return parseFloat(box.paddingLeft) + parseFloat(box.paddingRight);
+  }
+
   function applyScale() {
     var mode = zoom.value;
     var k;
@@ -183,6 +194,14 @@
     stage.style.transform = "scale(" + k + ")";
     stageHolder.style.width = Math.round(canvasW * k) + "px";
     stageHolder.style.height = Math.round(canvasH * k) + "px";
+
+    /* How wide the panels end up depends on how tall the window is, because
+       they wrap into columns, and how wide the scene is depends on what the
+       panels left. Css cannot settle that in one pass, so the width the two of
+       them came to is written back here and the board centres on it. The track
+       below picks the same width up, which is what lines the two of them up. */
+    var want = Math.round(canvasW * k) + rowGapOf(deck) + Math.ceil(controls.getBoundingClientRect().width);
+    board.style.width = Math.min(want, workspace.clientWidth - padXOf(workspace)) + "px";
     scaleNote.textContent = canvasW + " x " + canvasH + " at " + Math.round(k * 100) + "%";
     measureNames();
   }
@@ -233,13 +252,18 @@
      much as they occupy rather than by a guess. */
   var nameFields = { a: document.getElementById("nameFieldA"), b: document.getElementById("nameFieldB") };
   var nameLabels = { a: document.getElementById("nameA"), b: document.getElementById("nameB") };
+  var nameWhich = { a: document.getElementById("nameWhichA"), b: document.getElementById("nameWhichB") };
   var nameBox = document.querySelector(".slot-names");
 
   function measureNames() {
     /* Load bearing: applyResolution calls this while the page is starting up,
        which is before the line below that looks the box up has run. */
     if (!nameBox) return;
-    var any = nameLabels.a.textContent !== "" || nameLabels.b.textContent !== "";
+
+    /* The band stays open if any picture in either reel carries a name, not
+       only the two on screen, so stepping through a reel where some are named
+       and some are not does not shunt the caption up and down underneath. */
+    var any = namedAnywhere("a") || namedAnywhere("b");
     nameBox.classList.toggle("has-text", any);
     /* offsetHeight is layout pixels, and the stage is laid out at its real
        output size and only scaled for viewing, so this is already in canvas
@@ -254,17 +278,49 @@
     document.documentElement.style.setProperty("--name-band", band + "px");
   }
 
+  function namedAnywhere(which) {
+    var names = reels[which] ? reels[which].names : null;
+    if (!names) return false;
+    for (var i = 0; i < names.length; i++) if (names[i]) return true;
+    return false;
+  }
+
+  /* The field edits the name of whichever picture that square is showing, so
+     one field covers a reel of any length and the panel never becomes a list.
+     Stepping to the next picture swaps what the field is editing. */
   function applySlotName(which) {
     var field = nameFields[which];
-    if (!field) return;
+    var reel = reels[which];
+    if (!field || !reel.layers.length) return;
 
     /* Control characters can arrive with a paste, and one of them inside the
-       svg makes the whole document unparseable rather than just ugly: the
+       svg makes the whole document unparseable rather than merely ugly: the
        raster fails to load and the take quietly loses its caption with it. */
-    nameLabels[which].textContent = field.value.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+    reel.names[reel.index] = field.value.replace(/[\u0000-\u001f\u007f]/g, "").trim();
+
+    showName(which);
+    drawTrack();
+  }
+
+  /* Puts the current picture's name on the stage, and tells the field which
+     picture it is editing. */
+  function showName(which) {
+    var reel = reels[which];
+    var label = nameLabels[which];
+    var text = reel.layers.length ? (reel.names[reel.index] || "") : "";
+
+    label.textContent = text;
+    label.classList.toggle("is-on", text !== "");
+
+    var field = nameFields[which];
+    field.disabled = !reel.layers.length;
+    if (document.activeElement !== field) field.value = text;
+    nameWhich[which].textContent = reel.layers.length
+      ? "picture " + (reel.index + 1) + " of " + reel.layers.length
+      : "this picture";
 
     measureNames();
-    buildCaption();
+    buildNames();
   }
 
   for (var sn in nameFields) {
@@ -284,8 +340,8 @@
      nothing is copied or uploaded anywhere. Object URLs do not survive a
      reload, which is why the panel always shows what is currently loaded. */
   var reels = {
-    a: { urls: [], layers: [], index: 0, el: null, stack: null, count: null, timer: 0, under: null, fadeAt: 0 },
-    b: { urls: [], layers: [], index: 0, el: null, stack: null, count: null, timer: 0, under: null, fadeAt: 0 }
+    a: { urls: [], layers: [], names: [], index: 0, el: null, stack: null, count: null, timer: 0, under: null, fadeAt: 0 },
+    b: { urls: [], layers: [], names: [], index: 0, el: null, stack: null, count: null, timer: 0, under: null, fadeAt: 0 }
   };
 
   var SLOT_FADE = 140;
@@ -299,6 +355,15 @@
 
   SLOT_FADE = fadeMs();
 
+  var BREAK_TAG = new RegExp("<br" + String.fromCharCode(92) + "s*>", "gi");
+
+  var CAPTION_FADE = (function () {
+    var raw = getComputedStyle(document.documentElement).getPropertyValue("--caption-fade");
+    var ms = parseFloat(raw);
+    if (!isFinite(ms)) return 320;
+    return raw.indexOf("ms") === -1 ? ms * 1000 : ms;
+  })();
+
   function describe(reel) {
     if (!reel.layers.length) return "none";
     return (reel.index + 1) + " of " + reel.layers.length;
@@ -311,11 +376,13 @@
     for (i = 0; i < reel.layers.length; i++) reel.layers[i].remove();
     reel.urls = [];
     reel.layers = [];
+    reel.names = [];
     reel.index = 0;
     reel.under = null;
     reel.fadeAt = 0;
     reel.el.classList.remove("is-filled");
     reel.count.textContent = "none";
+    showName(name);
   }
 
   function showFrame(name, index, animate) {
@@ -327,6 +394,7 @@
     var moved = reel.index !== index;
     reel.index = index;
     reel.count.textContent = describe(reel);
+    showName(name);
     if (moved) noteKeyframe(name, index);
 
     if (!next) return;
@@ -398,6 +466,7 @@
       layer.src = url;
       reel.stack.appendChild(layer);
       reel.urls.push(url);
+      reel.names.push("");
       reel.layers.push(layer);
       arriving.push(layer);
     }
@@ -997,6 +1066,12 @@
     });
   }
 
+  function pictureName(lane, index) {
+    var reel = reels[lane];
+    if (!reel || !reel.names) return "";
+    return reel.names[index] || "";
+  }
+
   function drawTrack() {
     var span = trackSpan();
 
@@ -1030,7 +1105,14 @@
       chip.textContent = item.lane === "pose"
         ? (POSE_MARK[item.value] || "?")
         : String(item.value + 1);
-      chip.title = item.t.toFixed(2) + "s  " + item.value;
+
+      /* The number says which picture, which is no help when you are looking
+         for the moment a particular one arrives. If it has been given a name,
+         the chip carries that instead. */
+      var named = pictureName(item.lane, item.value);
+      chip.title = item.t.toFixed(2) + "s  " +
+        (item.lane === "pose" ? item.value : "picture " + (item.value + 1) + (named ? "  " + named : ""));
+      if (named) chip.textContent = named;
       chip.dataset.id = item.id;
       lane.appendChild(chip);
     }
@@ -1472,7 +1554,8 @@
       brush.drawImage(activeFace, fx.x, fx.y, fx.w, fx.h);
     }
 
-    if (captionArt) brush.drawImage(captionArt, 0, 0, canvasW, canvasH);
+    drawOverlay(namesArt, namesOn, namesAt, SLOT_FADE);
+    drawOverlay(captionArt, captionOn, captionAt, CAPTION_FADE);
   }
 
   /* ---------- the caption, drawn through the browser's own layout ---------- */
@@ -1481,8 +1564,20 @@
      rather than reimplementing any of that on the canvas the real element is
      handed back to the browser inside an SVG and rasterised. It only has to
      happen when the line changes, not every frame. */
+  /* Two pictures rather than one. The names and the caption arrive and leave
+     at different moments and each wants its own fade, which one shared raster
+     cannot give them. Both are still the real elements handed back to the
+     browser inside an svg and laid out by the page's own stylesheet. */
   var captionArt = null;
   var captionKey = "";
+  var captionOn = false;
+  var captionAt = 0;
+
+  var namesArt = null;
+  var namesKey = "";
+  var namesOn = false;
+  var namesAt = 0;
+
   var fontData = null;
   var sheetText = null;
 
@@ -1525,29 +1620,14 @@
     return raw.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  function buildCaption() {
-    var html = subtitle.classList.contains("has-text") ? subtitleText.innerHTML : "";
-    var left = nameLabels.a.textContent;
-    var right = nameLabels.b.textContent;
-    var key = html + "|" + left + "|" + right + "|" + canvasW + "x" + canvasH + "|" + cssBox.value;
-    if (key === captionKey) return;
-
-    if (!html && !left && !right) { captionKey = key; captionArt = null; return; }
-
-    /* The stylesheet may still be on its way. Leave the key alone so this runs
-       again once it lands, rather than marking the caption done. */
-    if (sheetText === null) return;
-    captionKey = key;
-
-    /* An SVG is read as XML, where a bare <br> is a syntax error. */
-    var body = html.replace(/<br\s*>/gi, "<br/>");
-
+  function stageDoc(inner) {
     var face = fontData
       ? '@font-face{font-family:"UN-Sandhyanee";src:url(' + fontData + ') format("truetype");}'
       : "";
 
-    /* CDATA keeps the stylesheet away from the XML parser. */
-    /* The live variables go in AFTER the stylesheet, not before it. The sheet
+    /* CDATA keeps the stylesheet away from the XML parser.
+
+       The live variables go in AFTER the stylesheet, not before it. The sheet
        carries its own :root block with --w and --h written as the defaults,
        and inside the svg both blocks select the same element with the same
        weight, so whichever comes last wins. Ahead of it these were overruled
@@ -1555,24 +1635,86 @@
        canvas was actually set to. */
     var css = "<style><![CDATA[" + face + sheetText + rootVars() + cssBox.value + "]]></style>";
 
-    var doc =
-      '<svg xmlns="http://www.w3.org/2000/svg" width="' + canvasW + '" height="' + canvasH + '">' +
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + canvasW + '" height="' + canvasH + '">' +
       '<foreignObject x="0" y="0" width="' + canvasW + '" height="' + canvasH + '">' +
-      '<div xmlns="http://www.w3.org/1999/xhtml" class="stage">' +
-      css +
-      (left || right
-        ? '<div class="slot-names has-text"><div class="slot-name">' + xmlText(left) +
-          '</div><div class="slot-name">' + xmlText(right) + "</div></div>"
-        : "") +
-      (html
-        ? '<div class="subtitle has-text"><div class="subtitle-text">' + body + "</div></div>"
-        : "") +
+      '<div xmlns="http://www.w3.org/1999/xhtml" class="stage">' + css + inner +
       "</div></foreignObject></svg>";
+  }
 
+  function rasterise(inner, keep) {
     var art = new Image();
-    art.onload = function () { captionArt = art; };
-    art.onerror = function () { captionArt = null; };
-    art.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(doc);
+    art.onload = function () { keep(art); };
+    art.onerror = function () { keep(null); };
+    art.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(stageDoc(inner));
+  }
+
+  /* How far through a fade the canvas is. The page does this with a css
+     transition, and a transition does not advance at all in a window nobody is
+     drawing, so a recording works it out from when the change happened. */
+  function fadeAlpha(on, at, ms) {
+    var k = at ? (performance.now() - at) / ms : 1;
+    if (!(k >= 0)) k = 1;
+    if (k > 1) k = 1;
+    return on ? k : 1 - k;
+  }
+
+  function drawOverlay(art, on, at, ms) {
+    if (!art) return;
+    var a = fadeAlpha(on, at, ms);
+    if (a <= 0) return;
+    brush.globalAlpha = a;
+    brush.drawImage(art, 0, 0, canvasW, canvasH);
+    brush.globalAlpha = 1;
+  }
+
+  function buildCaption() {
+    var on = subtitle.classList.contains("has-text");
+    var html = on ? subtitleText.innerHTML : "";
+    var key = html + "|" + canvasW + "x" + canvasH + "|" + cssBox.value;
+    if (key === captionKey) return;
+
+    /* The stylesheet may still be on its way. Leave the key alone so this runs
+       again once it lands, rather than marking the caption done. */
+    if (sheetText === null) return;
+    captionKey = key;
+
+    if (captionOn !== on) {
+      captionOn = on;
+      captionAt = performance.now();
+    }
+
+    /* A line that has ended keeps its picture, so there is something left to
+       fade out of. What ends it is the alpha, not the absence of a raster. */
+    if (!on) return;
+
+    /* An SVG is read as XML, where a bare <br> is a syntax error. */
+    var body = html.replace(BREAK_TAG, "<br/>");
+
+    rasterise('<div class="subtitle has-text"><div class="subtitle-text">' + body + "</div></div>",
+      function (art) { captionArt = art; });
+  }
+
+  function buildNames() {
+    var left = nameLabels.a.textContent;
+    var right = nameLabels.b.textContent;
+    var on = !!(left || right);
+    var key = left + "|" + right + "|" + canvasW + "x" + canvasH;
+    if (key === namesKey) return;
+    if (sheetText === null) return;
+    namesKey = key;
+
+    /* Restarted on every change rather than only on the first, so a name that
+       arrives with the next picture fades up the way the picture does. The
+       text swaps while it is invisible, which is what makes it read as a
+       dissolve rather than a jump. */
+    namesOn = on;
+    namesAt = performance.now();
+    if (!on) return;
+
+    rasterise('<div class="slot-names has-text">' +
+      '<div class="slot-name is-on">' + xmlText(left) + "</div>" +
+      '<div class="slot-name is-on">' + xmlText(right) + "</div></div>",
+      function (art) { namesArt = art; });
   }
 
   /* ---------- making the file open outside a browser ---------- */
@@ -1995,12 +2137,12 @@
     if (!recorder || phase !== "head") return;
     phase = "run";
 
-    /* Audio, subtitles or a track give the take an end of its own. With none of
-       them it runs until it is stopped by hand, so say so rather than sitting
-       on "recording" while it is waited out. */
-    recInfo.textContent = runLength()
-      ? "recording " + canvasW + " x " + canvasH + (voiceTracks.length ? " with audio" : "")
-      : "recording, press Stop when you are done";
+    /* The button will not start one without a length, so there is always an
+       end coming; what is worth saying is how long there is left of it. */
+    var runs = runLength();
+    recInfo.textContent = "exporting " + canvasW + " x " + canvasH +
+      (voiceTracks.length ? " with audio" : "") +
+      (runs ? ", " + Math.round(runs + HANDLE * 2) + "s in all" : "");
 
     setPlaying(true);
   }
@@ -2018,6 +2160,7 @@
   function step() {
     if (!recorder) return;
     buildCaption();
+    buildNames();
     drawScene();
 
     var now = performance.now();
@@ -2049,12 +2192,28 @@
   function captionReady(done) {
     var tries = 0;
     (function poll() {
-      var wanted = subtitle.classList.contains("has-text") ||
-                   nameLabels.a.textContent || nameLabels.b.textContent;
-      if (!wanted || captionArt || tries > 25) { done(); return; }
+      var wantCaption = subtitle.classList.contains("has-text");
+      var wantNames = !!(nameLabels.a.textContent || nameLabels.b.textContent);
+      var ready = (!wantCaption || captionArt) && (!wantNames || namesArt);
+      if ((!wantCaption && !wantNames) || ready || tries > 25) { done(); return; }
       tries++;
       setTimeout(poll, 20);
     })();
+  }
+
+  /* An export plays the scene through and ends itself. What tells it how long
+     that is, is the audio, the last subtitle line, or the captured track, and
+     with none of them loaded there is nothing to play and nothing to end it,
+     so it says so rather than starting a take that never finishes. */
+  function startExport() {
+    if (recorder || arming) return;
+
+    if (!runLength()) {
+      recInfo.textContent = "load audio or subtitles, or capture a track, first";
+      return;
+    }
+
+    startRecording();
   }
 
   function startRecording() {
@@ -2096,7 +2255,9 @@
     /* Put the opening line up before the first frame is taken. */
     renderCue(0);
     captionKey = "";
+    namesKey = "";
     buildCaption();
+    buildNames();
 
     /* Tapped here, while the click is still the reason anything is happening.
        Left until the timer below it, the browser sees no gesture behind it. */
@@ -2105,7 +2266,7 @@
     arming = true;
     recBtn.classList.add("is-live");
     recLabel.textContent = "Stop";
-    recInfo.textContent = "starting";
+    recInfo.textContent = "getting ready";
     captionReady(function () {
       arming = false;
       if (recorder) return;
@@ -2136,7 +2297,7 @@
     if (!opened) {
       recInfo.textContent = "this browser cannot record";
       recBtn.classList.remove("is-live");
-      recLabel.textContent = "Record";
+      recLabel.textContent = "Export to video";
       return;
     }
 
@@ -2243,7 +2404,7 @@
     if (arming && !recorder) {
       arming = false;
       recBtn.classList.remove("is-live");
-      recLabel.textContent = "Record";
+      recLabel.textContent = "Export to video";
       recInfo.textContent = "ready";
       setPlaying(false);
       return;
@@ -2259,7 +2420,7 @@
     setPlaying(false);
     recInfo.textContent = "saving";
     recBtn.classList.remove("is-live");
-    recLabel.textContent = "Record";
+    recLabel.textContent = "Export to video";
 
     /* A recorder that has already given up is inactive, and stop() on one of
        those throws instead of firing onstop. Either way, finish from whatever
@@ -2277,11 +2438,12 @@
   }
 
   recBtn.addEventListener("click", function () {
-    /* Stopping by hand still earns the closing handle, so every take has one.
-       Pressing again during that handle cuts it short. */
+    /* One button, and while an export is running it is the way to abandon it.
+       Cutting the middle short still earns the closing handle, so a file that
+       was stopped by hand ends the same way as one that ran out. */
     if (recorder && phase === "run") enterTail();
     else if (recorder) stopRecording();
-    else startRecording();
+    else startExport();
     recBtn.blur();
   });
 

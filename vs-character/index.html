@@ -19,6 +19,8 @@
 
 <main class="workspace">
 
+ <div class="board">
+
  <div class="deck">
 
   <div class="stage-area" id="stageArea">
@@ -111,11 +113,11 @@
     </section>
 
     <section class="panel">
-      <h2>Record</h2>
+      <h2>Export</h2>
       <div class="row-actions">
         <button class="btn btn-wide btn-rec" id="recBtn" type="button">
           <span class="rec-dot" aria-hidden="true"></span>
-          <span id="recLabel">Record</span>
+          <span id="recLabel">Export to video</span>
         </button>
       </div>
       <p class="row-count" id="recInfo">ready</p>
@@ -123,10 +125,10 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M4.5 16v2.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5V16"/></svg>
         Save the video
       </a>
-      <p class="note">Press Record: it holds the first frame for 3s, plays while you drive the scene,
-        then holds the last frame for 3s. It stops itself at the end of the audio, or of the last
-        subtitle line, or of the keyframe track. With none of those loaded it runs until you press
-        Stop. The file goes to your downloads on its own; the button below re-saves it.</p>
+      <p class="note">Plays the whole thing through and saves it to your downloads. It holds the
+        opening frame for 3s and the closing one for 3s, both showing the scene rather than blank,
+        so there is something to cut a transition against. Length comes from the audio, the last
+        subtitle line, or the captured track.</p>
     </section>
 
     <section class="panel">
@@ -144,8 +146,9 @@
         </button>
       </div>
       <label class="field field-name">
-        <span>Name under the left square</span>
-        <input id="nameFieldA" type="text" maxlength="60" autocomplete="off" spellcheck="false">
+        <span>Name for <b id="nameWhichA">this picture</b></span>
+        <input id="nameFieldA" type="text" maxlength="60" autocomplete="off" spellcheck="false"
+               placeholder="shown under the left square" disabled>
       </label>
 
       <div class="row row-gap">
@@ -160,8 +163,9 @@
         </button>
       </div>
       <label class="field field-name">
-        <span>Name under the right square</span>
-        <input id="nameFieldB" type="text" maxlength="60" autocomplete="off" spellcheck="false">
+        <span>Name for <b id="nameWhichB">this picture</b></span>
+        <input id="nameFieldB" type="text" maxlength="60" autocomplete="off" spellcheck="false"
+               placeholder="shown under the right square" disabled>
       </label>
 
       <p class="note">Click a square for the next image, or the arrow badge on it to add more.</p>
@@ -183,7 +187,7 @@
 
       <label class="field field-css">
         <span>Subtitle CSS</span>
-        <textarea id="subsCss" spellcheck="false" rows="9"></textarea>
+        <textarea id="subsCss" spellcheck="false" rows="6"></textarea>
       </label>
       <p class="note" id="cssNote">Edits apply as you type.</p>
     </section>
@@ -275,6 +279,8 @@
       the track into the video.</p>
 
   </section>
+
+ </div>
 
 </main>
 

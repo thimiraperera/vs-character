@@ -68,13 +68,19 @@ where neither one covers the square and the backdrop shows through the pair of
 them: at the midpoint of a 50/50 fade a quarter of the background comes through,
 and that is what reads as the picture vanishing before the next appears.
 
-## A name under each square
+## A name under each picture
 
-Each square can carry a name underneath it, typed in the panel beside its own
-Add images button. It appears under that square in the same two columns, so a
-name always lands under the picture it belongs to, and it goes into the
-recording like everything else on the canvas. Sinhala and Latin both work, and
-a long one wraps.
+Every picture can carry its own name, not just every square. The field in the
+panel edits whichever picture that square is showing and says which one that
+is, so one field covers a reel of any length and the panel never turns into a
+list. Step to the next picture and the field follows it.
+
+The name appears under its own square and goes into the video like everything
+else on the canvas. Sinhala and Latin both work, and a long one wraps.
+
+It also appears on the keyframe chips in the timeline. Looking for the moment a
+particular picture arrives, a chip reading `Orange` is worth more than one
+reading `2`, which is what makes the track something you can line up by eye.
 
 The names are drawn through the same rasteriser as the captions: the real
 elements are handed back to the browser inside an SVG with the Sinhala face
@@ -82,7 +88,27 @@ embedded, so what lands in the video is laid out by the CSS that placed it on
 screen rather than by a second copy of those rules that could drift.
 
 The band they take up is measured and published as `--name-band`, and the
-caption band below starts under it. With no names it is zero and nothing moves.
+caption band below starts under it. The band stays open if any picture in
+either reel is named, not only the two on screen, so stepping through a reel
+where some are named and some are not does not shunt the caption up and down.
+
+## Fades
+
+| what | how long | variable |
+| --- | --- | --- |
+| one picture into the next | 420ms | `--slot-fade` |
+| a name in or out | 420ms | `--slot-fade` |
+| a caption in or out | 320ms | `--caption-fade` |
+
+The names and the caption are two separate rasters rather than one, because
+they arrive and leave at different moments and a single picture could only
+carry one alpha between them.
+
+On screen the fades are CSS transitions. In a recording they cannot be: a
+transition does not advance at all in a window nobody is drawing, so the canvas
+works out how far through each fade it is from the moment the change happened.
+That is the same reason the dissolve between two pictures is timed from
+`reel.fadeAt` rather than read back off the elements.
 
 ## The backdrop
 
@@ -230,10 +256,19 @@ The caption text lives in a `.subtitle-text` box inside the band. That is what
 lets a `<b>` sit inline mid-sentence: the band centres one child, and dropping
 the text straight into it would turn every inline run into its own row.
 
-## Recording
+## Export
 
-**Record** writes a video while you drive the scene. Press 1, 2 and the arrow
-keys as it runs; the frames follow along.
+**Export to video** plays the whole thing through and saves the file to your
+downloads. One press: it ends itself and there is nothing to stop by hand,
+though pressing again abandons a take in progress.
+
+How long it runs comes from the audio, or the last subtitle line, or the
+captured keyframe track, whichever is loaded. With none of them there is
+nothing to play and nothing to end it, so the button says so instead of
+starting a take that would never finish.
+
+Press 1, 2 and the arrow keys as it runs and the frames follow along, or
+capture a track first and let it replay itself.
 
 A take runs in three parts:
 
@@ -243,15 +278,13 @@ A take runs in three parts:
 | playback | the audio, or the last subtitle line, or the keyframe track |
 | the closing frame, held | 3 seconds |
 
-So there is something to cut against at both ends. Playback starts when the
-opening handle finishes, not the moment the button is pressed. Pressing the
-button during playback ends the middle early but still runs the closing handle;
-pressing it again during that handle cuts it short.
+The two handles are there to cut transitions against. They are not blank: both
+hold the scene exactly as it stands, character, squares, names and all, so a
+crossfade into the next clip has something to work with.
 
-The middle part only knows how long it is if something tells it: an audio file,
-a subtitle file, or a keyframe track. With none of them loaded there is nothing
-to end the take, so it runs until it is stopped by hand, and the panel says so
-rather than sitting on "recording" while it is waited out.
+Playback starts when the opening handle finishes, not the moment the button is
+pressed. Pressing the button during playback ends the middle early but still
+runs the closing handle; pressing it again during that handle cuts it short.
 
 When it is done the file goes to the downloads folder on its own. A browser set
 to refuse a download nobody asked for will ignore that, which is what the **Save
@@ -351,8 +384,18 @@ they happen on their own.
 The blink frames are in. The mouth reads from up to five shapes beside each
 pose, `<pose>-talk-a.webp` through `<pose>-talk-s.webp`, and picks among whichever
 exist: never the same one twice running, each held 70 to 130ms, with the odd
-closed beat standing in for a gap between words. It is not lip sync, since
-nothing reads the audio; the variety is what stops it looking counted out.
+closed beat standing in for a gap between words. It is not lip sync, and it is worth being plain about that. Nothing reads the
+audio and nothing reads the subtitle text: while a line is on screen the mouth
+picks a shape at random, never the same one twice running, and now and then
+closes for a beat. The variety is what stops it looking counted out.
+
+Which means it is exactly as accurate in English as in Sinhala, because it is
+not reading either of them. At normal playback it reads as "she is talking",
+which is what a quiz clip needs. If you want the shapes actually driven by the
+words, that is a different job: for English the letters map onto these five
+shapes fairly directly, so it could be done from the subtitle text alone;
+Sinhala would need its own mapping, since a vowel sign hangs off its consonant
+rather than following it.
 
 The older single `<pose>-talk.webp` still works, so a pose without the named
 shapes falls back to it rather than going still. Once a pose has any named
@@ -410,6 +453,17 @@ All the controls sit outside the canvas, so only the scene is inside the
 recording area.
 
 ## Layout
+
+The scene, the panels and the track are one block, centred together. How wide
+the panels end up depends on how tall the window is, because they wrap into
+columns rather than scrolling, and how wide the scene can be depends on what
+the panels left it. CSS cannot settle that in one pass, so the layout pass in
+`script.js` measures what the two of them came to and writes the width back to
+the board. The track picks the same width up, which is what lines it up with
+the scene above it.
+
+At 1920 x 1080 that comes out as three columns of panels, a scene at 41%, and
+the whole board 1298px wide with equal margins either side.
 
 ```
 artwork-masters/            the drawings at full size, never loaded by the app

@@ -24,8 +24,10 @@
   /* Room taken by the names under the squares. Zero until one is typed. */
   --name-band: 0px;
 
-  /* How quickly one slot image dissolves into the next. */
-  --slot-fade: 140ms;
+  /* How slowly one slot image dissolves into the next, and the caption
+     and the names under the squares in and out with it. */
+  --slot-fade: 420ms;
+  --caption-fade: 320ms;
 
   /* Idle breathing depth. Set to 0 for a perfectly static character. */
   --breath: 0.008;
@@ -209,9 +211,12 @@ body{
 }
 
 .slot-names.has-text{ display: grid; }
+.slot-name.is-on{ opacity: 1; }
 
 .slot-name{
   min-width: 0;
+  opacity: 0;
+  transition: opacity var(--slot-fade) ease;
   font-family: UN-Sandhyanee, "Segoe UI", Roboto, sans-serif;
   /* Tied to the canvas width the way every other stage measurement is: 40px
      at 1080 wide, and the same share of the frame at 720, where a fixed size
@@ -299,20 +304,19 @@ body{
   right: var(--edge);
   top: calc(var(--slot-top) + (var(--w) * 1px - 3 * var(--edge)) / 2 + var(--name-band));
   bottom: calc(var(--floor) + var(--char-height));
-  display: none;
-  padding: 16px 0;
-  pointer-events: none;
-}
-
-/* Shown only while a line is on screen. The band centres a single child, and
-   that child holds the text: putting the caption straight into a flex box
-   would make every inline run inside it, a <b> included, its own flex item
-   and stack them one per line. */
-.subtitle.has-text{
   display: flex;
   flex-direction: column;
   justify-content: center;
+  padding: 16px 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--caption-fade) ease;
 }
+
+/* The band centres a single child and that child holds the text: putting the
+   caption straight into a flex box would make every inline run inside it, a
+   <b> included, its own flex item and stack them one per line. */
+.subtitle.has-text{ opacity: 1; }
 
 .subtitle-text{ white-space: pre-wrap; }
 
@@ -479,6 +483,11 @@ body{
   display: flex;
   gap: 8px;
 }
+
+/* display on a class beats the hidden attribute, which is only a rule in the
+   browser's own sheet, so the save link sat there before there was anything to
+   save. */
+.btn[hidden]{ display: none; }
 
 .btn{
   display: inline-flex;
@@ -715,8 +724,18 @@ body{
   gap: 16px;
 }
 
+.board{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+  max-width: 100%;
+}
+
 .deck{
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   justify-content: center;
   gap: 40px;
@@ -727,7 +746,12 @@ body{
 
 .timeline{
   flex: 0 0 auto;
-  width: 100%;
+
+  /* Zero width so the track's own content never decides how wide the board
+     is - that is the scene's job - and then a minimum of the full board so it
+     spans whatever width the scene settled on. */
+  width: 0;
+  min-width: 100%;
   padding: 14px 16px 12px;
   border: 1px solid rgba(255,255,255,.07);
   border-radius: 14px;
@@ -860,8 +884,6 @@ body{
   height: 20px;
   min-width: 20px;
   padding: 0 6px;
-  display: grid;
-  place-items: center;
   transform: translateX(-50%);
   border: 1px solid rgba(255,255,255,.16);
   border-radius: 5px;
@@ -873,6 +895,18 @@ body{
   white-space: nowrap;
   cursor: grab;
   user-select: none;
+
+  /* A name is worth more than an index for finding a moment, but a long one
+     would cover its neighbours, so it is trimmed rather than allowed to run. */
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  /* block rather than grid, because an ellipsis needs a box to run out of.
+     The line height does the centring the grid was doing. */
+  display: block;
+  text-align: center;
+  line-height: 18px;
 }
 
 .tl-key.is-pose{ background: #3f6ea8; }
