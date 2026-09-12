@@ -454,16 +454,17 @@ recording area.
 
 ## Layout
 
-The scene, the panels and the track are one block, centred together. How wide
-the panels end up depends on how tall the window is, because they wrap into
-columns rather than scrolling, and how wide the scene can be depends on what
-the panels left it. CSS cannot settle that in one pass, so the layout pass in
-`script.js` measures what the two of them came to and writes the width back to
-the board. The track picks the same width up, which is what lines it up with
-the scene above it.
+The scene and the panels are one block, centred. The track underneath spans the
+window whatever that block comes to.
 
-At 1920 x 1080 that comes out as three columns of panels, a scene at 41%, and
-the whole board 1298px wide with equal margins either side.
+How wide the panels end up depends on how tall the window is, because they wrap
+into columns rather than scrolling, and how wide the scene can be depends on
+what the panels left it. CSS cannot settle that in one pass, so the layout pass
+in `script.js` measures what the two of them came to and writes it back as the
+block's width.
+
+At 1920 x 1080 that is three columns of panels, a scene at 41%, and the block
+1298px wide with 311px of margin either side.
 
 ```
 artwork-masters/            the drawings at full size, never loaded by the app

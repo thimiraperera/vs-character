@@ -19,7 +19,6 @@
   var stageArea = document.getElementById("stageArea");
   var workspace = document.querySelector(".workspace");
   var deck = document.querySelector(".deck");
-  var board = document.querySelector(".board");
   var controls = document.querySelector(".controls");
   var timeline = document.getElementById("timeline");
   var castShadow = document.getElementById("castShadow");
@@ -198,10 +197,10 @@
     /* How wide the panels end up depends on how tall the window is, because
        they wrap into columns, and how wide the scene is depends on what the
        panels left. Css cannot settle that in one pass, so the width the two of
-       them came to is written back here and the board centres on it. The track
-       below picks the same width up, which is what lines the two of them up. */
+       them came to is written back here, and the deck centres on it. The track
+       underneath is left alone: it spans the window whatever this comes to. */
     var want = Math.round(canvasW * k) + rowGapOf(deck) + Math.ceil(controls.getBoundingClientRect().width);
-    board.style.width = Math.min(want, workspace.clientWidth - padXOf(workspace)) + "px";
+    deck.style.width = Math.min(want, workspace.clientWidth - padXOf(workspace)) + "px";
     scaleNote.textContent = canvasW + " x " + canvasH + " at " + Math.round(k * 100) + "%";
     measureNames();
   }
