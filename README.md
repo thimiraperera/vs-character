@@ -278,8 +278,20 @@ though pressing again abandons a take in progress.
 
 How long it runs comes from the audio, or the last subtitle line, or the
 captured keyframe track, whichever is loaded. With none of them there is
-nothing to play and nothing to end it, so the button says so instead of
-starting a take that would never finish.
+nothing to play and nothing to end it.
+
+The panel says which of those it has before the button is reached for:
+`ready, 10s to export`, or in red, what is missing. It used to say `ready`
+whether or not there was anything to export and only object once pressed,
+which is a button refusing a press the panel had just invited, and is the
+single likeliest reason this ever looked broken.
+
+Nothing about the export needs a server. It is `canvas.captureStream()` into
+`MediaRecorder`, both in the page, and the remux to a plain mp4 afterwards is
+done byte by byte in JavaScript. No upload, no encoder on any machine but this
+one. What it does need is to be served over http rather than opened as a file,
+because the caption fetches the stylesheet to lay itself out; opened as a file
+the export still runs, but the caption comes out unstyled.
 
 Press 1, 2 and the arrow keys as it runs and the frames follow along, or
 capture a track first and let it replay itself.

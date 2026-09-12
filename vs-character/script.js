@@ -813,6 +813,7 @@
     planMouths();
     setCaption("");
     subsInfo.textContent = "none";
+    exportState();
   }
 
   subsFile.addEventListener("change", function () {
@@ -830,6 +831,7 @@
         ? file.name + ", " + cues.length + " lines"
         : file.name + ", nothing readable";
       renderCue(elapsed);
+      exportState();
     };
     reader.onerror = function () { subsInfo.textContent = "could not read that file"; };
     reader.readAsText(file);
@@ -911,6 +913,7 @@
     URL.revokeObjectURL(audioUrl);
     audioUrl = "";
     audioInfo.textContent = "none";
+    exportState();
   }
 
   audioFile.addEventListener("change", function () {
@@ -923,6 +926,7 @@
     audioUrl = URL.createObjectURL(file);
     audio.src = audioUrl;
     audioInfo.textContent = file.name;
+    exportState();
     elapsed = 0;
     drawClock();
   });
@@ -930,6 +934,7 @@
   audio.addEventListener("loadedmetadata", function () {
     if (isFinite(audio.duration)) {
       audioInfo.textContent = audioInfo.textContent.split("  ")[0] + "  " + stamp(audio.duration);
+      exportState();
     }
   });
 
@@ -1194,6 +1199,7 @@
   }
 
   function drawTrack() {
+    exportState();
     var span = trackSpan();
 
     tlRuler.innerHTML = "";
@@ -2968,6 +2974,17 @@
     recInfo.classList.toggle("is-bad", !!bad);
   }
 
+  /* What the panel says while nothing is happening. It used to say "ready"
+     whether or not there was anything to export, so the button refused a press
+     the panel had just invited: the single likeliest reason this ever looked
+     broken. Now it says what is missing, before the button is reached for. */
+  function exportState() {
+    if (!recInfo || recorder || arming || saveUrl) return;
+    var runs = runLength();
+    if (runs) say("ready, " + Math.round(runs + HANDLE * 2) + "s to export");
+    else say("nothing to export yet: load audio or subtitles, or arm Capture and drive the scene", true);
+  }
+
   function startExport() {
     if (recorder || arming) return;
 
@@ -3217,6 +3234,10 @@
   audio.addEventListener("ended", function () {
     if (recorder && phase === "run") enterTail();
   });
+
+  /* The panel is wired after the track is first drawn, so the opening report
+     has to be made here rather than there. */
+  exportState();
 
   loadFontData();
   loadSheet();
