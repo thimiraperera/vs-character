@@ -388,22 +388,14 @@ closed beat standing in for a gap between words. The mouth is driven by the word
 phoneme timing behind it, but the shapes and their order come from what is
 being said rather than from a dice roll.
 
-## The lip sync track
+The words come from the subtitle file, when that file is written in letters
+this can read: more than 60% Latin and it drives the mouth, otherwise she falls
+back to the old shapes-at-random while a line is up. Sinhala script carries
+nothing it can read, so Sinhala subtitles take the fallback.
 
-Sinhala script carries no letters this can read, so there is a second subtitle
-file that is never displayed. Write the same words in Latin letters in it -
-Singlish - and the mouth follows those while the visible subtitle stays in
-Sinhala. It loads from the Subtitles panel and goes nowhere near the screen.
-
-Where the words come from, in order:
-
-1. the lip sync track, if one is loaded
-2. the visible subtitle, if it is already more than 60% Latin letters
-3. neither, and she falls back to the old shapes-at-random while a line is up
-
-One table serves English and Singlish with no language flag anywhere, because
-the four places they look like they disagree turn out to be positional rather
-than linguistic:
+One table covers English and any Latin transliteration with no language flag,
+because the places they look like they disagree turn out to be positional
+rather than linguistic:
 
 | trap | what happens |
 | --- | --- |

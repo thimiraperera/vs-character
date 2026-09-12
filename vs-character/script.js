@@ -574,10 +574,6 @@
   var cues = [];
   var shownCue = -1;
 
-  /* A second track, never drawn. It exists so Sinhala can be lip synced: the
-     user writes the same words in Latin letters and the mouth reads those. */
-  var syncCues = [];
-
   /* "00:01:02,500" and "01:02.500" both turn up in real files. */
   function toSeconds(text) {
     var bits = text.trim().replace(",", ".").split(":");
@@ -737,34 +733,6 @@
   document.getElementById("pickSubs").addEventListener("click", function () { subsFile.click(); });
   document.getElementById("clearSubs").addEventListener("click", clearSubs);
 
-  /* ---------- the track nobody sees ---------- */
-
-  var syncInfo = document.getElementById("syncInfo");
-  var syncFile = document.getElementById("fileSync");
-
-  syncFile.addEventListener("change", function () {
-    var file = syncFile.files && syncFile.files[0];
-    syncFile.value = "";
-    if (!file) return;
-
-    var reader = new FileReader();
-    reader.onload = function () {
-      syncCues = parseCues(String(reader.result));
-      planMouths();
-      syncInfo.textContent = syncCues.length
-        ? file.name + ", " + syncCues.length + " lines"
-        : file.name + ", nothing readable";
-    };
-    reader.onerror = function () { syncInfo.textContent = "could not read that file"; };
-    reader.readAsText(file);
-  });
-
-  document.getElementById("pickSync").addEventListener("click", function () { syncFile.click(); });
-  document.getElementById("clearSync").addEventListener("click", function () {
-    syncCues = [];
-    planMouths();
-    syncInfo.textContent = "none";
-  });
 
   /* ---------- subtitle styling ---------- */
 
@@ -1751,10 +1719,8 @@
     return letters ? latin / letters : 0;
   }
 
-  /* The track nobody sees wins outright. Mixing the two would have her speak
-     both wherever they overlap. */
+  /* Only worth doing when the subtitle is written in letters this can read. */
   function lipSource() {
-    if (syncCues.length) return syncCues;
     if (cues.length && latinShare(cues) > 0.6) return cues;
     return null;
   }
@@ -2725,13 +2691,9 @@
     return "";
   }
 
-  /* Both tracks count. A line that is only ever mouthed still has to be given
-     the time to be mouthed in, so an export driven by nothing but the lip sync
-     track runs to the end of it. */
   function lastCueEnd() {
     var end = 0;
     for (var i = 0; i < cues.length; i++) if (cues[i].end > end) end = cues[i].end;
-    for (i = 0; i < syncCues.length; i++) if (syncCues[i].end > end) end = syncCues[i].end;
     return end;
   }
 
