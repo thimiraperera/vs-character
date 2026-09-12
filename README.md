@@ -343,27 +343,32 @@ in the video. It is redrawn when the line changes rather than every frame.
 Under the scene is a keyframe track: three lanes, one for the pose and one for
 each square.
 
-Arm **Capture**, press Play, and drive the scene. Every pose the character moves
-to and every picture a square moves to is kept as a keyframe at the moment it
-happened. Starting from the top with Capture armed begins a new take, and it
-opens with an entry per lane so the take records where it began as well as what
-changed. Without that, replaying it would leave the squares wherever the last
-take ended.
+Arm **Capture** and drive the scene. Every pose the character moves to and every
+picture a square moves to is kept as a keyframe at the moment it happened.
+
+The clock does not have to be running. Drag the ruler to a moment, press the
+key, and the keyframe lands there — which is how a single beat gets placed or
+corrected without performing the whole take again.
+
+Capture adds to the track rather than replacing it, so the poses can be done in
+one pass and the pictures in another. A lane with nothing on it yet gets an
+entry saying where it started, so replay knows what to put back; a lane that
+already carries keyframes is left alone. **Clear** is what empties the track.
 
 Turn Capture off and Play replays the track instead. A key held down still wins,
 so a replay can be taken over at any point.
 
 To adjust: drag a keyframe along its lane to retime it, or select one and use
 the nudge buttons for a tenth of a second at a time. Delete removes the selected
-one. Clicking the ruler scrubs, which applies the track at that moment so a
-change can be checked in place.
+one. Dragging the ruler runs the scene under the pointer, so a change can be
+watched in place rather than guessed at.
 
 The wheel runs along the timeline. Ctrl and the wheel zooms it instead, up to
 40x, about the moment under the pointer so that moment stays put while the strip
 stretches around it. The ruler re-ticks for what is on screen, down to quarter
 seconds, and a playhead that runs off the edge brings the view along with it.
 
-**Record** replays the track into the video, and disarms Capture first so the
+**Export to video** replays the track into the video, and disarms Capture first so the
 take cannot rewrite the thing it is playing. With no audio, a recording runs to
 the last keyframe rather than stopping early.
 

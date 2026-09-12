@@ -161,6 +161,9 @@ body{
    where neither covers the square and the backdrop shows through it, which is
    what reads as a blink. */
 .slot-img.is-front{ opacity: 1; }
+
+/* For putting a layer somewhere without animating it getting there. */
+.slot-img.is-instant{ transition: none; }
 .slot-img.is-top{ z-index: 2; }
 .slot.is-filled{ background: none; }
 .slot.is-filled .slot-empty{ display: none; }

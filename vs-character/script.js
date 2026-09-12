@@ -409,6 +409,25 @@
       return;
     }
 
+    /* Anything still lit from a swap that was interrupted has to go out now.
+       A layer later in the dom paints above an earlier one at the same depth,
+       so a picture from two steps ago could sit on top of the one going out
+       and show through the arriving layer as it rises. That is the flash of
+       an old picture during a fade. */
+    for (var n = 0; n < reel.layers.length; n++) {
+      if (reel.layers[n] !== prev && reel.layers[n] !== next) {
+        reel.layers[n].classList.remove("is-front", "is-top");
+      }
+    }
+
+    /* The one going out has to be fully opaque for the whole crossfade, or
+       the backdrop shows through the pair of them. If it was itself still
+       fading in when this swap arrived it is snapped up rather than left part
+       way, which is the other half of the same flash. */
+    prev.classList.add("is-instant", "is-front");
+    void prev.offsetWidth;
+    prev.classList.remove("is-instant");
+
     /* The arriving layer goes on top still transparent, then fades up over the
        outgoing one, which keeps its full opacity underneath the whole time. */
     prev.classList.remove("is-top");
@@ -904,7 +923,7 @@
       /* Starting from the top with capture armed is a new take, not an
          addition to the last one. It opens with an entry per lane so the take
          records where it began as well as what changed. */
-      if (capturing && elapsed < 0.05) seedTake();
+      if (capturing) seedTake();
 
       offset = elapsed;
       startedAt = performance.now();
@@ -1003,8 +1022,11 @@
   };
 
   function noteKeyframe(lane, value) {
-    if (!capturing || !playing) return;
+    if (!capturing) return;
 
+    /* Wherever the playhead is, running or not. Scrub to a moment, press the
+       key, and the keyframe lands there; it used to need the clock to be
+       moving, which made placing one by hand impossible. */
     var at = Math.max(0, elapsed);
 
     /* One entry per lane per instant, so holding a key through a stutter does
@@ -1018,18 +1040,29 @@
     drawTrack();
   }
 
+  /* A lane with nothing on it yet gets an entry saying where it started, so
+     replay knows what to put back. Lanes that already carry keyframes are left
+     alone: capturing the poses and then coming back for the pictures is two
+     passes at one take, not two takes, and the first pass used to be thrown
+     away by the second. Clear is what empties the track. */
   function seedTake() {
-    track = [];
-    picked = null;
-    seq = 0;
-
-    track.push({ id: ++seq, t: 0, lane: "pose", value: current });
-    ["a", "b"].forEach(function (name) {
-      if (reels[name].layers.length) {
-        track.push({ id: ++seq, t: 0, lane: name, value: reels[name].index });
-      }
-    });
+    var lanes = ["pose", "a", "b"];
+    for (var i = 0; i < lanes.length; i++) {
+      var lane = lanes[i];
+      if (lane !== "pose" && !reels[lane].layers.length) continue;
+      if (laneHas(lane)) continue;
+      track.push({
+        id: ++seq, t: 0, lane: lane,
+        value: lane === "pose" ? current : reels[lane].index
+      });
+    }
+    track.sort(function (x, y) { return x.t - y.t; });
     drawTrack();
+  }
+
+  function laneHas(lane) {
+    for (var i = 0; i < track.length; i++) if (track[i].lane === lane) return true;
+    return false;
   }
 
   function trackSpan() {
@@ -1245,11 +1278,28 @@
   tlGrid.addEventListener("pointerup", endDrag);
   tlGrid.addEventListener("pointercancel", endDrag);
 
-  /* Clicking the ruler scrubs, which is how a keyframe gets checked in place. */
+  /* Dragging the ruler runs the scene under the pointer, which is how a
+     keyframe gets checked in place and how a moment gets found to put one at. */
+  var scrubbing = false;
+
   tlRuler.addEventListener("pointerdown", function (e) {
+    e.preventDefault();
+    scrubbing = true;
+    if (tlRuler.setPointerCapture) {
+      try { tlRuler.setPointerCapture(e.pointerId); } catch (err) {}
+    }
+    scrubTo(timeFromX(e.clientX));
+  });
+
+  tlRuler.addEventListener("pointermove", function (e) {
+    if (!scrubbing) return;
     e.preventDefault();
     scrubTo(timeFromX(e.clientX));
   });
+
+  function endScrub() { scrubbing = false; }
+  tlRuler.addEventListener("pointerup", endScrub);
+  tlRuler.addEventListener("pointercancel", endScrub);
 
   function scrubTo(time) {
     setPlaying(false);
@@ -1269,7 +1319,7 @@
     capBtn.classList.toggle("is-armed", capturing);
     capLabel.textContent = capturing ? "Capturing" : "Capture";
     tlInfo.textContent = capturing
-      ? "armed: Play, then drive the scene"
+      ? "armed: drive the scene, playing or scrubbed"
       : (track.length ? track.length + " keyframes" : "nothing captured");
     capBtn.blur();
   });
