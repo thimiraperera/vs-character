@@ -384,18 +384,69 @@ they happen on their own.
 The blink frames are in. The mouth reads from up to five shapes beside each
 pose, `<pose>-talk-a.webp` through `<pose>-talk-s.webp`, and picks among whichever
 exist: never the same one twice running, each held 70 to 130ms, with the odd
-closed beat standing in for a gap between words. It is not lip sync, and it is worth being plain about that. Nothing reads the
-audio and nothing reads the subtitle text: while a line is on screen the mouth
-picks a shape at random, never the same one twice running, and now and then
-closes for a beat. The variety is what stops it looking counted out.
+closed beat standing in for a gap between words. The mouth is driven by the words. It reads letters, not audio, so there is no
+phoneme timing behind it, but the shapes and their order come from what is
+being said rather than from a dice roll.
 
-Which means it is exactly as accurate in English as in Sinhala, because it is
-not reading either of them. At normal playback it reads as "she is talking",
-which is what a quiz clip needs. If you want the shapes actually driven by the
-words, that is a different job: for English the letters map onto these five
-shapes fairly directly, so it could be done from the subtitle text alone;
-Sinhala would need its own mapping, since a vowel sign hangs off its consonant
-rather than following it.
+## The lip sync track
+
+Sinhala script carries no letters this can read, so there is a second subtitle
+file that is never displayed. Write the same words in Latin letters in it -
+Singlish - and the mouth follows those while the visible subtitle stays in
+Sinhala. It loads from the Subtitles panel and goes nowhere near the screen.
+
+Where the words come from, in order:
+
+1. the lip sync track, if one is loaded
+2. the visible subtitle, if it is already more than 60% Latin letters
+3. neither, and she falls back to the old shapes-at-random while a line is up
+
+One table serves English and Singlish with no language flag anywhere, because
+the four places they look like they disagree turn out to be positional rather
+than linguistic:
+
+| trap | what happens |
+| --- | --- |
+| `w` | rounds only at the start of a word. English *what, we, why* round; Sinhala's *wenasa, puluwan, kiyanawa* do not, and a purse there looks like whistling |
+| `oy ay aw ow ey` | only a vowel pair when no vowel follows. `oyaa` is o-y-aa, `nowe` is no-we, `hawasa` is ha-wa-sa |
+| final `e` | always a light beat, never silent. A silent-e rule deletes the last syllable of *kade, mage, gedhare, kiyanne* |
+| `th` | transparent in both. Sinhala's th is a dental t with the lips idle, and it is everywhere - *thamai, mathaka, ithin, gaththa* - so reading it as the English fricative sprays a teeth-slit through every other syllable |
+
+What the mouth actually shows is mostly the vowel. Of the consonants only
+`b m p` (the lips meet), `s z j x f v sh ch ph` (the teeth show) and a
+word-initial `w` are worth a frame; `t d k n l r g h` and every digraph behind
+the teeth emit nothing at all and the vowel either side carries them. Giving
+every consonant a frame is what makes a talking mouth look like a machine.
+`correct` is two shapes, and that is right.
+
+Two rules do most of the work:
+
+**Consonants cost a fixed number of ticks off the top; the vowels share what
+is left.** Dividing the line evenly instead makes an `s` as long as an `aa`,
+which is the metronome.
+
+**The dip.** Between two open beats of the same shape a short spread beat is
+planned in. Sinhala is full of short `a` and nearly all its consonants are
+tongue-only, so without it `balanna`, `kohomada` and `godak rasai` hold one
+unchanging open mouth from end to end. The jaw really does come up and go down
+between those syllables. It is a spread and never a rest, because the resting
+mouth is itself mildly open and would read as a third open beat.
+
+Everything is whole 40ms ticks, apportioned by largest remainder, so a line
+always mouths the same way and the exported frame lands on the same shape the
+preview showed. A crowded line loses beats rather than shortening them - dips
+first, then glides, then detail consonants, and lip closures never - which is
+what really happens to fast speech.
+
+Blinking stays random and independent of all this, so she keeps blinking
+through the held frames at either end of an export. It also means two exports
+of the same material are not frame-identical; the mouth is, the eyes are not.
+
+```
+balanna         m 80  a 200  e 120  a 200  e 120  a 200  rest 480  m 80
+oyaa kohomada   o 200 a 200  o 160  e 80   o 160  m 80   a 160  e 80  a 200
+mokakda wenasa  m 80  o 200  a 200  e 80   a 200  o 80   e 200  a 160 s 80  a 200
+```
 
 The older single `<pose>-talk.webp` still works, so a pose without the named
 shapes falls back to it rather than going still. Once a pose has any named

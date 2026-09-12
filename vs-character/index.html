@@ -185,6 +185,21 @@
       <p class="row-count" id="subsInfo">none</p>
       <input id="fileSubs" type="file" accept=".srt,.vtt,text/vtt,application/x-subrip,text/plain" hidden>
 
+      <div class="row row-gap">
+        <span class="row-name">Lip sync</span>
+        <span class="row-count" id="syncInfo">none</span>
+      </div>
+      <div class="row-actions">
+        <button class="btn btn-wide" id="pickSync" type="button">Choose .srt or .vtt</button>
+        <button class="btn" id="clearSync" type="button" aria-label="Clear the lip sync track">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7l10 10M17 7L7 17"/></svg>
+        </button>
+      </div>
+      <input id="fileSync" type="file" accept=".srt,.vtt,text/vtt,application/x-subrip,text/plain" hidden>
+      <p class="note">A second track that is never shown. Write the words in Latin letters, Sinhala
+        included, and the mouth follows them instead of guessing. Without one she reads the visible
+        subtitle when it is already in Latin letters.</p>
+
       <label class="field field-css">
         <span>Subtitle CSS</span>
         <textarea id="subsCss" spellcheck="false" rows="6"></textarea>

@@ -574,6 +574,10 @@
   var cues = [];
   var shownCue = -1;
 
+  /* A second track, never drawn. It exists so Sinhala can be lip synced: the
+     user writes the same words in Latin letters and the mouth reads those. */
+  var syncCues = [];
+
   /* "00:01:02,500" and "01:02.500" both turn up in real files. */
   function toSeconds(text) {
     var bits = text.trim().replace(",", ".").split(":");
@@ -679,7 +683,7 @@
       var said = lines.slice(timeAt + 1).join("\n").trim();
       if (!said || !(to > from)) continue;
 
-      found.push({ start: from, end: to, html: safeText(said) });
+      found.push({ start: from, end: to, html: safeText(said), said: said });
     }
 
     found.sort(function (x, y) { return x.start - y.start; });
@@ -705,6 +709,7 @@
   function clearSubs() {
     cues = [];
     shownCue = -1;
+    planMouths();
     setCaption("");
     subsInfo.textContent = "none";
   }
@@ -718,6 +723,7 @@
     reader.onload = function () {
       cues = parseCues(String(reader.result));
       shownCue = -1;
+      planMouths();
       setCaption("");
       subsInfo.textContent = cues.length
         ? file.name + ", " + cues.length + " lines"
@@ -730,6 +736,35 @@
 
   document.getElementById("pickSubs").addEventListener("click", function () { subsFile.click(); });
   document.getElementById("clearSubs").addEventListener("click", clearSubs);
+
+  /* ---------- the track nobody sees ---------- */
+
+  var syncInfo = document.getElementById("syncInfo");
+  var syncFile = document.getElementById("fileSync");
+
+  syncFile.addEventListener("change", function () {
+    var file = syncFile.files && syncFile.files[0];
+    syncFile.value = "";
+    if (!file) return;
+
+    var reader = new FileReader();
+    reader.onload = function () {
+      syncCues = parseCues(String(reader.result));
+      planMouths();
+      syncInfo.textContent = syncCues.length
+        ? file.name + ", " + syncCues.length + " lines"
+        : file.name + ", nothing readable";
+    };
+    reader.onerror = function () { syncInfo.textContent = "could not read that file"; };
+    reader.readAsText(file);
+  });
+
+  document.getElementById("pickSync").addEventListener("click", function () { syncFile.click(); });
+  document.getElementById("clearSync").addEventListener("click", function () {
+    syncCues = [];
+    planMouths();
+    syncInfo.textContent = "none";
+  });
 
   /* ---------- subtitle styling ---------- */
 
@@ -1339,8 +1374,13 @@
     img.alt = "";
 
     img.addEventListener("load", function () {
-      if (suffix === "blink") faces[pose].blink = img;
-      else faces[pose].mouths.push(img);
+      if (suffix === "blink") {
+        faces[pose].blink = img;
+      } else {
+        faces[pose].mouths.push(img);
+        /* Named so the words can ask for a shape rather than an index. */
+        faces[pose].byShape[suffix] = img;
+      }
       characterBox.appendChild(img);
       if (img.decode) img.decode().catch(function () {});
       if (onSettled) onSettled();
@@ -1351,7 +1391,7 @@
   }
 
   function loadFaces(pose) {
-    faces[pose] = { blink: null, mouths: [] };
+    faces[pose] = { blink: null, mouths: [], byShape: {} };
     probeFace(pose, "blink", null);
 
     /* The older pair is only asked for once the named shapes have all had
@@ -1379,6 +1419,559 @@
 
   /* A shape at random, never the same one twice running, with the odd closed
      beat standing in for the gap between words. */
+
+  /* ---------- reading the words off the page ---------- */
+
+  /* What the mouth does is mostly the vowel. Of the consonants, only the ones
+     that make the lips do something a vowel would not are worth a frame at
+     all: b, m and p close them, the sibilants narrow them, and a w at the
+     start of a word rounds them. Everything else is tongue, velum or throat,
+     and the audience sees nothing, so it emits nothing and the vowel either
+     side carries it. Giving every consonant a frame is what makes a talking
+     mouth look like a machine.
+
+     One table serves English and Singlish with no flag anywhere, because the
+     four places they look like they disagree turn out to be positional rather
+     than linguistic: w rounds only at the start of a word, a vowel pair ending
+     in w or y is only a pair when a vowel does not follow it, a word-final e
+     is always light, and th is transparent in both. That last one is a
+     decision rather than a dodge. Sinhala's th is a dental t, a stop with the
+     lips idle, and it is everywhere - thamai, mathaka, ithin, gaththa - so
+     reading it as the English fricative sprays a teeth-slit through every
+     other syllable. Losing the small English slit costs far less. */
+
+  var TICK = 0.04;
+  var FLOOR = 2;                 /* under two ticks a shape is a flicker */
+  var DIP_CEIL = 3;
+  var CEIL = { "talk-a": 5, "talk-e": 6, "talk-o": 6, "talk-s": 4, "talk-m": 4 };
+  var LEAD = 2;                  /* start a shade early; late reads worse */
+  var TAIL = 2;                  /* close the lips at the end of a line */
+  var JOIN = 6;                  /* cues closer than this are one breath */
+  var RATE_MAX = 7;              /* vowels a second before beats get dropped */
+  var SOFT_PAUSE = 4;
+  var HARD_PAUSE = 8;
+
+  var VOWEL_LETTER = "aeiou";
+  var FUNCTION_WORDS = (" a an the is of to and in it on or as at be that " +
+                        " da de ne yi ka ma ").split(/\s+/);
+
+  /* kind V is a vowel carrying a weight, C a consonant costing whole ticks,
+     and a pattern listed with no kind is transparent: matched so it is
+     consumed whole, then thrown away. Longest first, which is what stops sh
+     being read as s then h, or aa as two separate a beats. */
+  var MOUTH_RULES = [
+    ["igh", "VV", "talk-a", 1.0, "talk-e", 0.7],
+    ["aee", "V", "talk-a", 1.4],
+    ["tch", "C", "talk-s", 2],
+
+    ["aa", "V", "talk-a", 1.8],
+    ["ae", "V", "talk-a", 1.2],
+    ["ai", "VV", "talk-a", 1.0, "talk-e", 0.7],
+    ["ay", "VV", "talk-a", 1.0, "talk-e", 0.7, "guard"],
+    ["au", "V", "talk-o", 1.4],
+    ["aw", "V", "talk-o", 1.4, "guard"],
+    ["ee", "V", "talk-e", 1.8],
+    ["ii", "V", "talk-e", 1.8],
+    ["ea", "V", "talk-e", 1.4],
+    ["ei", "V", "talk-e", 1.4],
+    ["ie", "V", "talk-e", 1.4],
+    ["ey", "V", "talk-e", 1.4, "guard"],
+    ["oo", "V", "talk-o", 1.8],
+    ["uu", "V", "talk-o", 1.8],
+    ["oa", "V", "talk-o", 1.4],
+    ["ui", "V", "talk-o", 1.4],
+    ["ue", "V", "talk-o", 1.4],
+    ["ou", "VV", "talk-a", 1.0, "talk-o", 0.7],
+    ["ow", "VV", "talk-a", 1.0, "talk-o", 0.7, "guard"],
+    ["oi", "VV", "talk-o", 1.0, "talk-e", 0.7],
+    ["oy", "VV", "talk-o", 1.0, "talk-e", 0.7, "guard"],
+
+    /* One closure held through both letters, not two smacks: amba, Colombo. */
+    ["mb", "C", "talk-m", 3], ["mp", "C", "talk-m", 3],
+    /* A doubled letter is one longer sound, and it leans on its neighbours. */
+    ["mm", "C", "talk-m", 3, "gem"], ["pp", "C", "talk-m", 3, "gem"],
+    ["bb", "C", "talk-m", 3, "gem"], ["ss", "C", "talk-s", 3, "gem"],
+    ["sh", "C", "talk-s", 2], ["ch", "C", "talk-s", 2], ["ph", "C", "talk-s", 2],
+
+    /* Behind the teeth, every one of them. Nothing to see. */
+    ["th", "-"], ["dh", "-"], ["kh", "-"], ["gh", "-"], ["bh", "-"],
+    ["ck", "-"], ["ng", "-"], ["nd", "-"], ["nt", "-"], ["nk", "-"], ["nj", "-"],
+    ["tt", "-", "gem"], ["dd", "-", "gem"], ["nn", "-", "gem"],
+    ["ll", "-", "gem"], ["kk", "-", "gem"], ["rr", "-", "gem"], ["gg", "-", "gem"],
+
+    ["a", "V", "talk-a", 1.0],
+    ["e", "V", "talk-e", 1.0],
+    ["i", "V", "talk-e", 0.9],
+    ["o", "V", "talk-o", 1.0],
+    ["u", "V", "talk-o", 0.9],
+
+    ["m", "C", "talk-m", 2], ["b", "C", "talk-m", 2], ["p", "C", "talk-m", 2],
+    ["s", "C", "talk-s", 2], ["z", "C", "talk-s", 2], ["j", "C", "talk-s", 2],
+    ["x", "C", "talk-s", 2], ["f", "C", "talk-s", 2], ["v", "C", "talk-s", 2],
+    ["q", "C", "talk-o", 2]
+  ];
+
+  function isVowelLetter(ch) { return ch && VOWEL_LETTER.indexOf(ch) !== -1; }
+
+  /* The handful of letters whose value depends on where they sit. */
+  function placedRule(word, at) {
+    var ch = word.charAt(at);
+    var next = word.charAt(at + 1);
+
+    if (ch === "w") {
+      /* write, wrong: the w is silent, and rounding for it is a visible lie. */
+      if (at === 0 && next === "r") return { skip: 1 };
+      if (at === 0 && next === "h") return { kind: "C", shape: "talk-o", ticks: 2, skip: 2 };
+      /* Sinhala's w has no rounding at all, and it is almost always medial:
+         wenasa, puluwan, kiyanawa. English's does, and it is almost always
+         initial: what, we, why. So position decides, not language. */
+      if (at === 0) return { kind: "C", shape: "talk-o", ticks: 2, skip: 1 };
+      return { skip: 1 };
+    }
+
+    if (ch === "q" && next === "u") {
+      return { kind: "C", shape: "talk-o", ticks: 2, skip: 2 };
+    }
+
+    /* A glide before a vowel, and the mouth is already making the vowel:
+       yes, oyaa, kiyanawa, lassanayi. */
+    if (ch === "y") {
+      if (isVowelLetter(next)) return { skip: 1 };
+      return { kind: "V", shape: "talk-e", weight: 0.9, skip: 1 };
+    }
+
+    /* Soft c only. Hard c is a k and shows nothing: capital, Colombo. */
+    if (ch === "c") {
+      if (next === "e" || next === "i" || next === "y") {
+        return { kind: "C", shape: "talk-s", ticks: 2, skip: 1 };
+      }
+      return { skip: 1 };
+    }
+
+    /* No silent-e rule. It would delete the last syllable of kade, mage,
+       gedhare and kiyanne, which are ordinary Sinhala words. */
+    if (ch === "e" && at === word.length - 1) {
+      return { kind: "V", shape: "talk-e", weight: 0.6, skip: 1 };
+    }
+
+    if (ch >= "0" && ch <= "9") {
+      return { kind: "V", shape: "talk-a", weight: 0.9, skip: 1 };
+    }
+
+    return null;
+  }
+
+  function tableRule(word, at) {
+    for (var i = 0; i < MOUTH_RULES.length; i++) {
+      var row = MOUTH_RULES[i];
+      var pattern = row[0];
+      if (word.substr(at, pattern.length) !== pattern) continue;
+
+      /* A pair ending in w or y is only a pair when no vowel follows it:
+         oyaa is o-y-aa, nowe is no-we, hawasa is ha-wa-sa. */
+      var guarded = row[row.length - 1] === "guard";
+      if (guarded && isVowelLetter(word.charAt(at + pattern.length))) continue;
+
+      var gem = row[row.length - 1] === "gem";
+      if (row[1] === "-") return { skip: pattern.length, gem: gem };
+      if (row[1] === "C") {
+        return { kind: "C", shape: row[2], ticks: row[3], skip: pattern.length, gem: gem };
+      }
+      if (row[1] === "V") {
+        return { kind: "V", shape: row[2], weight: row[3], skip: pattern.length };
+      }
+      return {
+        kind: "VV", shape: row[2], weight: row[3],
+        shape2: row[4], weight2: row[5], skip: pattern.length
+      };
+    }
+    return null;
+  }
+
+  function scanWord(word) {
+    var beats = [];
+    var at = 0;
+
+    while (at < word.length) {
+      var hit = placedRule(word, at) || tableRule(word, at);
+      if (!hit) { at += 1; continue; }
+
+      if (hit.kind === "V" || hit.kind === "VV") {
+        beats.push({ kind: "V", shape: hit.shape, weight: hit.weight });
+        if (hit.kind === "VV") beats.push({ kind: "V", shape: hit.shape2, weight: hit.weight2, glide: true });
+      } else if (hit.kind === "C") {
+        beats.push({ kind: "C", shape: hit.shape, ticks: hit.ticks });
+      }
+
+      /* A long consonant borrows from the vowel in front and lends to the one
+         behind, which is what a geminate actually sounds like. */
+      if (hit.gem) {
+        for (var b = beats.length - 1; b >= 0; b--) {
+          if (beats[b].kind === "V") { beats[b].weight *= 0.8; break; }
+        }
+        beats.push({ lend: true });
+      }
+
+      at += hit.skip;
+    }
+
+    /* Nothing but silent letters still moves the mouth once. */
+    if (!beats.length && word.length) beats.push({ kind: "V", shape: "talk-e", weight: 0.6 });
+    return beats;
+  }
+
+  function readWord(word, quiet) {
+    var beats = scanWord(word);
+    var out = [];
+    var lend = false;
+
+    for (var i = 0; i < beats.length; i++) {
+      if (beats[i].lend) { lend = true; continue; }
+      if (lend && beats[i].kind === "V") { beats[i].weight *= 1.15; lend = false; }
+      out.push(beats[i]);
+    }
+
+    var first = -1;
+    for (i = 0; i < out.length; i++) if (out[i].kind === "V") { first = i; break; }
+    if (first !== -1 && out[first].weight < 1.8) out[first].weight *= 1.15;
+
+    if (quiet) {
+      for (i = 0; i < out.length; i++) {
+        if (out[i].kind === "V") out[i].weight *= 0.7;
+        else out[i].spare = true;
+      }
+    }
+    return out;
+  }
+
+  function readLine(text) {
+    var clean = String(text).toLowerCase()
+      .replace(/\[[^\]]*\]/g, " ")
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/\u0101/g, "aa").replace(/\u0113/g, "ee").replace(/\u012b/g, "ii")
+      .replace(/\u014d/g, "oo").replace(/\u016b/g, "uu").replace(/\u00e6/g, "ae")
+      .replace(/([a-z])['\u2019-]([a-z])/g, "$1$2");
+
+    var marks = clean.replace(/[,;:]/g, " \u0001 ").replace(/[.!?\u2026\u2014]/g, " \u0002 ");
+    var parts = marks.split(/\s+/);
+    var out = [];
+
+    /* A mark at the very end of the line is not a pause in it, it is the
+       closing of the mouth, and that is the tail. */
+    while (parts.length && (parts[parts.length - 1] === "\u0001" ||
+                            parts[parts.length - 1] === "\u0002" || parts[parts.length - 1] === "")) {
+      parts.pop();
+    }
+
+    for (var i = 0; i < parts.length; i++) {
+      var part = parts[i];
+      if (!part) continue;
+      if (part === "\u0001") { out.push({ kind: "P", ticks: SOFT_PAUSE }); continue; }
+      if (part === "\u0002") { out.push({ kind: "P", ticks: HARD_PAUSE, hard: true }); continue; }
+
+      var word = part.replace(/[^a-z0-9]/g, "");
+      if (!word) continue;
+
+      var beats = readWord(word, FUNCTION_WORDS.indexOf(word) !== -1);
+
+      /* The gap between words is a quarter beat on the vowel before it and
+         nothing else. Closing the lips in every gap is the chewing tell. */
+      var follows = parts[i + 1];
+      if (follows !== "\u0001" && follows !== "\u0002") {
+        for (var j = beats.length - 1; j >= 0; j--) {
+          if (beats[j].kind === "V") { beats[j].weight += 0.25; break; }
+        }
+      }
+      for (j = 0; j < beats.length; j++) out.push(beats[j]);
+    }
+    return out;
+  }
+
+  /* Run again after every drop, because dropping changes what is adjacent. */
+  function joinBeats(list) {
+    var out = [];
+
+    for (var i = 0; i < list.length; i++) {
+      var beat = list[i];
+      var last = out[out.length - 1];
+
+      /* A sibilant or a closure really does run across a word boundary. */
+      if (last && last.kind === "C" && beat.kind === "C" && last.shape === beat.shape) {
+        last.ticks = Math.min(Math.max(last.ticks, beat.ticks) + 1, CEIL[last.shape]);
+        continue;
+      }
+      /* A round before a round vowel is the same mouth twice. */
+      if (last && last.kind === "C" && beat.kind === "V" && last.shape === beat.shape) {
+        out.pop();
+        beat = { kind: "V", shape: beat.shape, weight: beat.weight + 0.4, glide: beat.glide };
+      }
+      out.push(beat);
+    }
+
+    /* THE DIP, and it is the whole of what makes Sinhala work. Its words are
+       full of short a and its consonants are nearly all tongue, so balanna,
+       kohomada and "godak rasai" would otherwise hold one unchanging open
+       mouth from end to end. Between two open beats the jaw really does come
+       up and go down again, and that is a talk-e - never a rest, because the
+       resting mouth is itself mildly open and would read as a third open
+       beat. It is planned in here, before the time is shared out, so it
+       competes for its share like anything else. */
+    var dipped = [];
+    for (i = 0; i < out.length; i++) {
+      var prev = dipped[dipped.length - 1];
+      if (prev && prev.kind === "V" && out[i].kind === "V" &&
+          prev.shape === out[i].shape &&
+          (prev.shape === "talk-a" || prev.shape === "talk-o")) {
+        dipped.push({ kind: "V", shape: "talk-e", weight: 0.5, dip: true });
+      }
+      dipped.push(out[i]);
+    }
+
+    /* A line that ends without this looks clipped. */
+    for (i = dipped.length - 1; i >= 0; i--) {
+      if (dipped[i].kind === "V") { dipped[i].weight *= 1.5; break; }
+    }
+    return dipped;
+  }
+
+  /* Latin letters carry the mapping and Sinhala script does not, so a visible
+     subtitle is only worth reading if it is written in them already. */
+  function latinShare(list) {
+    var latin = 0, letters = 0;
+    for (var i = 0; i < list.length; i++) {
+      var text = list[i].said || "";
+      for (var j = 0; j < text.length; j++) {
+        var ch = text.charAt(j);
+        if (/[\s0-9.,!?'"();:-]/.test(ch)) continue;
+        letters++;
+        if (/[A-Za-z]/.test(ch)) latin++;
+      }
+    }
+    return letters ? latin / letters : 0;
+  }
+
+  /* The track nobody sees wins outright. Mixing the two would have her speak
+     both wherever they overlap. */
+  function lipSource() {
+    if (syncCues.length) return syncCues;
+    if (cues.length && latinShare(cues) > 0.6) return cues;
+    return null;
+  }
+
+  /* ---------- turning that into whole ticks ---------- */
+
+  var mouthPlan = [];
+
+  function dropOne(list) {
+    var i;
+    /* Detail first, lip closures last, in that order, because that is what
+       really goes when someone speaks quickly. */
+    for (i = list.length - 1; i >= 0; i--) if (list[i].dip) { list.splice(i, 1); return true; }
+    for (i = list.length - 1; i >= 0; i--) if (list[i].glide) { list.splice(i, 1); return true; }
+    for (i = list.length - 1; i >= 0; i--) if (list[i].spare && list[i].kind === "C") { list.splice(i, 1); return true; }
+    for (i = list.length - 2; i >= 1; i--) {
+      if (list[i].kind === "C" && list[i - 1].kind === "C" && list[i + 1].kind === "C" &&
+          list[i].shape !== "talk-m") { list.splice(i, 1); return true; }
+    }
+    for (i = list.length - 1; i >= 0; i--) if (list[i].kind === "C" && list[i].shape === "talk-s") { list.splice(i, 1); return true; }
+    for (i = list.length - 1; i >= 0; i--) if (list[i].kind === "P" && list[i].ticks > 0) { list[i].ticks = list[i].ticks > 4 ? 4 : list[i].ticks - 2; return true; }
+    for (i = list.length - 1; i >= 0; i--) if (list[i].kind === "C" && list[i].shape === "talk-o") { list.splice(i, 1); return true; }
+
+    /* Lightest vowel folded into the one before it, never the first or last. */
+    var pick = -1;
+    for (i = 1; i < list.length - 1; i++) {
+      if (list[i].kind !== "V") continue;
+      if (pick === -1 || list[i].weight < list[pick].weight) pick = i;
+    }
+    if (pick !== -1) {
+      for (i = pick - 1; i >= 0; i--) {
+        if (list[i].kind === "V") { list[i].weight += list[pick].weight; break; }
+      }
+      list.splice(pick, 1);
+      return true;
+    }
+    return false;
+  }
+
+  function planCue(cue, before, after) {
+    var beats = joinBeats(readLine(cue.said || ""));
+    if (!beats.length) return [];
+
+    var from = Math.round(cue.start / TICK);
+    var to = Math.round(cue.end / TICK);
+    var lead = (before === null || from - before >= 4) ? LEAD : 0;
+    var tail = (after !== null && after - to < JOIN) ? 0 : TAIL;
+    var seconds = cue.end - cue.start;
+
+    var pool, weights, nuclei, fixed, guard = 0;
+    while (true) {
+      fixed = tail;
+      weights = 0;
+      nuclei = 0;
+      for (var i = 0; i < beats.length; i++) {
+        if (beats[i].kind === "C") fixed += beats[i].ticks;
+        else if (beats[i].kind === "P") fixed += beats[i].ticks;
+        else { weights += beats[i].weight; nuclei++; }
+      }
+      pool = (to - from) + lead - fixed;
+
+      var tooDense = nuclei && (pool < FLOOR * nuclei || nuclei > RATE_MAX * seconds);
+      if (!tooDense || guard++ > 200) break;
+      if (!dropOne(beats)) break;
+      beats = joinBeats(beats);
+    }
+
+    if (pool < 0) pool = 0;
+
+    /* Every vowel gets a share of what the consonants left, in proportion to
+       its weight. Sharing it evenly instead is what turns a mouth into a
+       metronome: it makes an s as long as a long aa. */
+    var unit = weights ? pool / weights : 0;
+    var exact = [];
+    var fixedSum = 0;
+    var freeSum = 0;
+
+    for (i = 0; i < beats.length; i++) {
+      if (beats[i].kind !== "V") { exact.push(null); continue; }
+      var want = beats[i].weight * unit;
+      var cap = beats[i].dip ? DIP_CEIL : CEIL[beats[i].shape];
+      if (want < FLOOR) { exact.push({ held: FLOOR }); fixedSum += FLOOR; }
+      else if (want > cap) { exact.push({ held: cap }); fixedSum += cap; }
+      else { exact.push({ want: want }); freeSum += want; }
+    }
+
+    /* Whatever the clamps did not use becomes one settle at the end, rather
+       than being shared out again: handing a clamped vowel's surplus to
+       whichever beat happens to be next is how an unstressed syllable ends up
+       longer than the stressed one in front of it. */
+    var give = pool - fixedSum;
+    if (give < 0) give = 0;
+    var slack = 0;
+    if (give > Math.round(freeSum)) { slack = give - Math.round(freeSum); give = Math.round(freeSum); }
+
+    /* Handed out by largest remainder, so the ticks add up exactly and the
+       same line always comes out the same way. */
+    var whole = [], rest = [];
+    var used = 0;
+    for (i = 0; i < exact.length; i++) {
+      if (!exact[i] || exact[i].held !== undefined) { whole.push(0); rest.push(-1); continue; }
+      var floorTicks = Math.floor(exact[i].want);
+      if (floorTicks < FLOOR) floorTicks = FLOOR;
+      whole.push(floorTicks);
+      rest.push(exact[i].want - Math.floor(exact[i].want));
+      used += floorTicks;
+    }
+    var spare = give - used;
+    while (spare > 0) {
+      var best = -1;
+      for (i = 0; i < rest.length; i++) {
+        if (rest[i] < 0) continue;
+        if (best === -1 || rest[i] > rest[best]) best = i;
+      }
+      if (best === -1) break;
+      whole[best]++;
+      rest[best] = -1;
+      spare--;
+      if (spare > 0 && best === rest.length - 1) {
+        for (i = 0; i < rest.length; i++) if (exact[i] && exact[i].want !== undefined) rest[i] = exact[i].want - Math.floor(exact[i].want);
+      }
+    }
+
+    var runs = [];
+    var at = from - lead;
+
+    function put(shape, ticks) {
+      if (ticks <= 0) return;
+      var last = runs[runs.length - 1];
+      if (last && last.shape === shape) { last.to += ticks; at += ticks; return; }
+      runs.push({ from: at, to: at + ticks, shape: shape });
+      at += ticks;
+    }
+
+    for (i = 0; i < beats.length; i++) {
+      var beat = beats[i];
+      if (beat.kind === "C") { put(beat.shape, beat.ticks); continue; }
+      if (beat.kind === "P") {
+        /* The last couple of ticks of a pause belong to the next sound: the
+           mouth is in position before the voice arrives. */
+        var lead2 = Math.min(2, beat.ticks);
+        if (beat.hard) { put("talk-m", 2); put(null, beat.ticks - 2 - lead2); }
+        else put(null, beat.ticks - lead2);
+        var nextShape = null;
+        for (var k = i + 1; k < beats.length; k++) { if (beats[k].shape) { nextShape = beats[k].shape; break; } }
+        put(nextShape, lead2);
+        continue;
+      }
+      var ticks = exact[i] && exact[i].held !== undefined ? exact[i].held : whole[i];
+      put(beat.shape, ticks);
+    }
+
+    /* She finishes the line and settles while the subtitle is still up, which
+       is what really happens: subtitle ends are padded well past the voice. */
+    if (slack >= FLOOR) put(null, slack);
+    else tail = Math.min(tail + slack, 4);
+    put("talk-m", tail);
+
+    return runs;
+  }
+
+  function planMouths() {
+    mouthPlan = [];
+    var list = lipSource();
+    if (!list) return;
+
+    for (var i = 0; i < list.length; i++) {
+      var before = i > 0 ? Math.round(list[i - 1].end / TICK) : null;
+      var after = i < list.length - 1 ? Math.round(list[i + 1].start / TICK) : null;
+      var runs = planCue(list[i], before, after);
+      for (var j = 0; j < runs.length; j++) mouthPlan.push(runs[j]);
+    }
+    mouthPlan.sort(function (x, y) { return x.from - y.from; });
+  }
+
+  /* A pure function of the clock: no state between frames, nothing random, so
+     the preview and the exported file land on the same shape. */
+  function plannedMouth(time) {
+    var tick = Math.floor(time / TICK + 1e-6);
+    var lo = 0, hi = mouthPlan.length - 1;
+    while (lo <= hi) {
+      var mid = (lo + hi) >> 1;
+      var run = mouthPlan[mid];
+      if (tick < run.from) hi = mid - 1;
+      else if (tick >= run.to) lo = mid + 1;
+      else return run.shape;
+    }
+    return null;
+  }
+
+  /* A pose missing the drawing asked for takes the nearest one it has rather
+     than showing nothing at all. */
+  var SHAPE_FALLBACK = {
+    "talk-a": ["talk-a", "talk-e", "talk-s", "talk-o", "talk-m"],
+    "talk-e": ["talk-e", "talk-a", "talk-s", "talk-o", "talk-m"],
+    "talk-o": ["talk-o", "talk-e", "talk-a", "talk-m", "talk-s"],
+    "talk-s": ["talk-s", "talk-e", "talk-a", "talk-o", "talk-m"],
+    "talk-m": ["talk-m", "talk-o", "talk-s", "talk-e", "talk-a"]
+  };
+
+  function faceFor(set, shape) {
+    if (!shape || !set.byShape) return null;
+    var order = SHAPE_FALLBACK[shape] || [shape];
+    for (var i = 0; i < order.length; i++) if (set.byShape[order[i]]) return set.byShape[order[i]];
+    return null;
+  }
+
+  /* A pose that only has the older single talk frame cannot be driven by
+     words, so it keeps the old behaviour instead of standing still. */
+  function namedShapes(set) {
+    var n = 0;
+    for (var i = 0; i < MOUTH_SHAPES.length; i++) {
+      if (set.byShape && set.byShape[MOUTH_SHAPES[i]]) n++;
+    }
+    return n;
+  }
+
   function nextMouth(set) {
     if (!set.mouths.length) return null;
     if (Math.random() < MOUTH_REST) return null;
@@ -1394,7 +1987,7 @@
 
   function faceTick() {
     var now = performance.now();
-    var set = faces[current] || { blink: null, mouths: [] };
+    var set = faces[current] || { blink: null, mouths: [], byShape: {} };
 
     /* Blinks come every couple of seconds, a shade irregular, now and then as
        a quick pair. They carry on while paused, so she looks alive in a hold. */
@@ -1410,8 +2003,17 @@
     /* The mouth moves only while a line is on screen and the clock is
        running, changing shape at an uneven pace so it does not look counted
        out. */
-    var talking = playing && shownCue !== -1 && set.mouths.length > 0;
-    if (talking) {
+    if (!playing || !set.mouths.length) {
+      mouthNow = null;
+      lastMouth = null;
+      mouthAt = 0;
+    } else if (mouthPlan.length && namedShapes(set) > 1) {
+      /* Driven by the words. Same clock in, same shape out, every time. */
+      mouthNow = faceFor(set, plannedMouth(elapsed));
+      lastMouth = mouthNow;
+    } else if (shownCue !== -1) {
+      /* Nothing to read, so the old behaviour: keep the mouth busy while a
+         line is up, without pretending it knows what is being said. */
       if (now >= mouthAt) {
         mouthNow = nextMouth(set);
         lastMouth = mouthNow;
@@ -1422,6 +2024,8 @@
       lastMouth = null;
       mouthAt = 0;
     }
+
+    var talking = mouthNow !== null;
 
     if (blinkUntil && set.blink) showFace(set.blink);
     else showFace(talking ? mouthNow : null);
@@ -1547,6 +2151,13 @@
       var p = boxOf(pose);
       brush.drawImage(pose, p.x, p.y, p.w, p.h);
     }
+
+    /* The face is chosen again here rather than being taken as it stands,
+       because the page picks it on a 40ms timer of its own and a frame drawn
+       between two of those would carry a mouth up to a frame stale against its
+       own timestamp. Asking for it at the moment of drawing is what keeps the
+       exported file and the preview on the same shape. */
+    faceTick();
 
     if (activeFace && activeFace.naturalWidth) {
       var fx = boxOf(activeFace);
@@ -2114,9 +2725,13 @@
     return "";
   }
 
+  /* Both tracks count. A line that is only ever mouthed still has to be given
+     the time to be mouthed in, so an export driven by nothing but the lip sync
+     track runs to the end of it. */
   function lastCueEnd() {
     var end = 0;
     for (var i = 0; i < cues.length; i++) if (cues[i].end > end) end = cues[i].end;
+    for (i = 0; i < syncCues.length; i++) if (syncCues[i].end > end) end = syncCues[i].end;
     return end;
   }
 
