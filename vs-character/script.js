@@ -119,6 +119,16 @@
       return;
     }
 
+    /* The key anyone reaches for once a keyframe is selected. Backspace too,
+       since a keyboard without a Delete is common enough. */
+    if (e.key === "Delete" || e.key === "Backspace") {
+      if (dropPicked()) e.preventDefault();
+      return;
+    }
+
+    if (e.key === "Home") { e.preventDefault(); scrubTo(0); return; }
+    if (e.key === "End") { e.preventDefault(); scrubTo(takeEnd()); return; }
+
     var pose = KEY_POSES[e.key];
     if (!pose) return;
 
@@ -339,8 +349,8 @@
      nothing is copied or uploaded anywhere. Object URLs do not survive a
      reload, which is why the panel always shows what is currently loaded. */
   var reels = {
-    a: { urls: [], layers: [], names: [], index: 0, el: null, stack: null, count: null, timer: 0, under: null, fadeAt: 0 },
-    b: { urls: [], layers: [], names: [], index: 0, el: null, stack: null, count: null, timer: 0, under: null, fadeAt: 0 }
+    a: { urls: [], layers: [], names: [], index: 0, el: null, stack: null, count: null, timer: 0, under: null, mid: null, midAlpha: 0, fadeAt: 0 },
+    b: { urls: [], layers: [], names: [], index: 0, el: null, stack: null, count: null, timer: 0, under: null, mid: null, midAlpha: 0, fadeAt: 0 }
   };
 
   var SLOT_FADE = 140;
@@ -378,10 +388,25 @@
     reel.names = [];
     reel.index = 0;
     reel.under = null;
+    reel.mid = null;
     reel.fadeAt = 0;
     reel.el.classList.remove("is-filled");
     reel.count.textContent = "none";
     showName(name);
+  }
+
+  /* Out now, not over the next fade. A layer left dimming is still a layer
+     that paints, and one later in the dom paints above an earlier one at the
+     same depth. */
+  function snuff(layer) {
+    var lit = layer.classList.contains("is-front") || layer.style.opacity !== "";
+    layer.classList.remove("is-front", "is-top");
+    layer.style.zIndex = "";
+    if (!lit) { layer.style.opacity = ""; return; }
+    layer.classList.add("is-instant");
+    layer.style.opacity = "";
+    void layer.offsetWidth;
+    layer.classList.remove("is-instant");
   }
 
   function showFrame(name, index, animate) {
@@ -400,57 +425,109 @@
 
     if (!animate || !prev || prev === next) {
       if (reel.timer) { clearTimeout(reel.timer); reel.timer = 0; }
-      for (var i = 0; i < reel.layers.length; i++) {
-        reel.layers[i].classList.remove("is-front", "is-top");
-      }
+
+      /* The arriving one is lit before the others go out, or there is a frame
+         in between where nothing covers the square. */
       next.classList.add("is-front", "is-top");
+      for (var i = 0; i < reel.layers.length; i++) {
+        if (reel.layers[i] !== next) snuff(reel.layers[i]);
+      }
       reel.under = null;
+      reel.mid = null;
       reel.fadeAt = 0;
       return;
     }
 
-    /* Anything still lit from a swap that was interrupted has to go out now.
-       A layer later in the dom paints above an earlier one at the same depth,
-       so a picture from two steps ago could sit on top of the one going out
-       and show through the arriving layer as it rises. That is the flash of
-       an old picture during a fade. */
+    /* What is on screen is frozen exactly as it is, and the new picture rises
+       over the top of it. Nothing is snapped up and nothing is dropped, which
+       is the whole point: a picture that is part way in has to stay part way
+       in, because taking it away uncovers the one behind it and that is the
+       old picture flashing back.
+
+       So up to three layers are in play. The settled one underneath, opaque,
+       which is what stops the backdrop showing through. The one a previous
+       swap was still bringing in, held wherever it had got to. And the
+       arriving one on top. Depth is set here rather than left to the document
+       order, which would otherwise decide it and get it wrong. */
+    var settled = (reel.timer && reel.under && reel.under !== next) ? reel.under : prev;
+    var midway = (reel.timer && prev !== settled && prev !== next) ? prev : null;
+
+    if (settled === next) {
+      /* Stepping back onto the picture underneath: it is uncovered, not
+         dissolved to. */
+      if (reel.timer) { clearTimeout(reel.timer); reel.timer = 0; }
+      next.classList.add("is-front", "is-top");
+      next.style.opacity = "";
+      next.style.zIndex = "";
+      for (var q = 0; q < reel.layers.length; q++) {
+        if (reel.layers[q] !== next) snuff(reel.layers[q]);
+      }
+      reel.under = null;
+      reel.mid = null;
+      reel.fadeAt = 0;
+      return;
+    }
+
     for (var n = 0; n < reel.layers.length; n++) {
-      if (reel.layers[n] !== prev && reel.layers[n] !== next) {
-        reel.layers[n].classList.remove("is-front", "is-top");
+      var layer = reel.layers[n];
+      if (layer === settled || layer === midway || layer === next) continue;
+      snuff(layer);
+    }
+
+    /* Whatever is underneath has to be fully opaque for the whole crossfade,
+       or the pair of them let the backdrop through between them. */
+    settled.classList.remove("is-top");
+    settled.style.zIndex = "1";
+    if (!settled.classList.contains("is-front") || settled.style.opacity !== "") {
+      settled.classList.add("is-instant");
+      settled.classList.add("is-front");
+      settled.style.opacity = "";
+      void settled.offsetWidth;
+      settled.classList.remove("is-instant");
+    }
+
+    if (midway) {
+      var lit = reel.fadeAt ? (performance.now() - reel.fadeAt) / SLOT_FADE : 1;
+      if (!(lit >= 0)) lit = 1;
+      if (lit > 1) lit = 1;
+      if (!(lit > 0.002)) {
+        snuff(midway);
+        midway = null;
+      } else {
+        midway.classList.add("is-instant");
+        midway.classList.remove("is-top");
+        midway.style.opacity = String(lit);
+        midway.style.zIndex = "2";
+        void midway.offsetWidth;
+        midway.classList.remove("is-instant");
       }
     }
 
-    /* The one going out has to be fully opaque for the whole crossfade, or
-       the backdrop shows through the pair of them. If it was itself still
-       fading in when this swap arrived it is snapped up rather than left part
-       way, which is the other half of the same flash. */
-    prev.classList.add("is-instant", "is-front");
-    void prev.offsetWidth;
-    prev.classList.remove("is-instant");
-
-    /* The arriving layer goes on top still transparent, then fades up over the
-       outgoing one, which keeps its full opacity underneath the whole time. */
-    prev.classList.remove("is-top");
+    /* The arriving layer goes on top still transparent, then fades up over
+       everything held beneath it. */
     next.classList.add("is-top");
+    next.style.zIndex = "3";
+    next.classList.add("is-instant");
     next.classList.remove("is-front");
-
-    /* Let that starting point be a real frame, or the browser folds it into the
-       same style change and there is nothing to animate from. */
+    next.style.opacity = "";
     void next.offsetWidth;
+    next.classList.remove("is-instant");
     next.classList.add("is-front");
 
     /* Noted so the canvas can work the dissolve out from the clock. Reading it
        back off the elements would tie the recording to how far the browser has
        got with the transition, and a window that is not being drawn does not
        advance one at all. */
-    reel.under = prev;
+    reel.under = settled;
+    reel.mid = midway;
+    reel.midAlpha = midway ? lit : 0;
     reel.fadeAt = performance.now();
 
     if (reel.timer) clearTimeout(reel.timer);
     reel.timer = setTimeout(function () {
       reel.timer = 0;
       for (var i = 0; i < reel.layers.length; i++) {
-        if (reel.layers[i] !== next) reel.layers[i].classList.remove("is-front");
+        if (reel.layers[i] !== next) snuff(reel.layers[i]);
       }
     }, fadeMs() + 40);
   }
@@ -1334,13 +1411,33 @@
   tlBack.addEventListener("click", function () { nudge(-0.1); });
   tlFwd.addEventListener("click", function () { nudge(0.1); });
 
-  tlDel.addEventListener("click", function () {
+  function dropPicked() {
+    if (!picked) return false;
     for (var i = 0; i < track.length; i++) {
       if (track[i].id === picked) { track.splice(i, 1); break; }
     }
     picked = null;
     drawTrack();
     applyTrack(elapsed);
+    return true;
+  }
+
+  tlDel.addEventListener("click", function () { dropPicked(); tlDel.blur(); });
+
+  /* ---------- getting about the track ---------- */
+
+  function takeEnd() {
+    return runLength() || trackSpan();
+  }
+
+  document.getElementById("tlStart").addEventListener("click", function () {
+    scrubTo(0);
+    this.blur();
+  });
+
+  document.getElementById("tlEnd").addEventListener("click", function () {
+    scrubTo(takeEnd());
+    this.blur();
   });
 
   drawTrack();
@@ -2132,8 +2229,17 @@
         roundedPath(b.x, b.y, b.w, b.h, radius);
         brush.clip();
 
+        /* The same three the page is showing: the settled one underneath, one
+           held part way from a swap this one interrupted, and the arriving one
+           over both. Painting only two of them would drop the middle picture
+           out of the file, which on screen is the old picture flashing. */
         if (mix < 1 && reel.under && reel.under !== arriving && reel.under.naturalWidth) {
           drawCover(reel.under, b.x, b.y, b.w, b.h);
+        }
+        if (mix < 1 && reel.mid && reel.mid !== arriving && reel.mid.naturalWidth && reel.midAlpha > 0) {
+          brush.globalAlpha = reel.midAlpha;
+          drawCover(reel.mid, b.x, b.y, b.w, b.h);
+          brush.globalAlpha = 1;
         }
 
         brush.globalAlpha = mix;
@@ -2766,9 +2872,9 @@
     /* The button will not start one without a length, so there is always an
        end coming; what is worth saying is how long there is left of it. */
     var runs = runLength();
-    recInfo.textContent = "exporting " + canvasW + " x " + canvasH +
+    say("exporting " + canvasW + " x " + canvasH +
       (voiceTracks.length ? " with audio" : "") +
-      (runs ? ", " + Math.round(runs + HANDLE * 2) + "s in all" : "");
+      (runs ? ", " + Math.round(runs + HANDLE * 2) + "s in all" : ""));
 
     setPlaying(true);
   }
@@ -2778,7 +2884,7 @@
     setPlaying(false);
     phase = "tail";
     phaseUntil = performance.now() + HANDLE * 1000;
-    recInfo.textContent = "holding the last frame, press again to cut it short";
+    say("holding the last frame, press again to cut it short");
     if (phaseTimer) clearTimeout(phaseTimer);
     phaseTimer = setTimeout(stopRecording, HANDLE * 1000);
   }
@@ -2831,11 +2937,19 @@
      that is, is the audio, the last subtitle line, or the captured track, and
      with none of them loaded there is nothing to play and nothing to end it,
      so it says so rather than starting a take that never finishes. */
+  function say(text, bad) {
+    recInfo.textContent = text;
+    recInfo.classList.toggle("is-bad", !!bad);
+  }
+
   function startExport() {
     if (recorder || arming) return;
 
     if (!runLength()) {
-      recInfo.textContent = "load audio or subtitles, or capture a track, first";
+      /* This is the whole reason the button ever looks broken: there is
+         nothing to play, so there is nothing to record, and saying so in the
+         same grey as everything else reads as the press doing nothing. */
+      say("nothing to export yet: load audio or subtitles, or arm Capture and drive the scene", true);
       return;
     }
 
@@ -2846,18 +2960,18 @@
     if (recorder || arming) return;
 
     if (!window.MediaRecorder || !frame.captureStream) {
-      recInfo.textContent = "this browser cannot record";
+      say("this browser cannot record", true);
       return;
     }
 
     var format = pickFormat();
     if (!format) {
-      recInfo.textContent = "this browser cannot record";
+      say("this browser cannot record", true);
       return;
     }
 
     if (sheetText === null || fontData === null) {
-      recInfo.textContent = "getting the caption ready";
+      say("getting the caption ready");
       setTimeout(startRecording, 120);
       return;
     }
@@ -2892,7 +3006,7 @@
     arming = true;
     recBtn.classList.add("is-live");
     recLabel.textContent = "Stop";
-    recInfo.textContent = "getting ready";
+    say("getting ready");
     captionReady(function () {
       arming = false;
       if (recorder) return;
@@ -2921,7 +3035,7 @@
     }
 
     if (!opened) {
-      recInfo.textContent = "this browser cannot record";
+      say("this browser cannot record", true);
       recBtn.classList.remove("is-live");
       recLabel.textContent = "Export to video";
       return;
@@ -2932,7 +3046,7 @@
 
     phase = "head";
     phaseUntil = performance.now() + HANDLE * 1000;
-    recInfo.textContent = "holding the first frame";
+    say("holding the first frame");
     if (phaseTimer) clearTimeout(phaseTimer);
     phaseTimer = setTimeout(startRun, HANDLE * 1000);
 
@@ -2961,7 +3075,7 @@
        whatever was written before it went. */
     rec.onerror = function (e) {
       var why = (e && e.error && e.error.name) || "the encoder gave up";
-      recInfo.textContent = "recording stopped: " + why;
+      say("recording stopped: " + why, true);
       stopRecording();
     };
 
@@ -2985,7 +3099,7 @@
     var blob = new Blob(chunks, { type: recFormat.split(";")[0] });
 
     if (!blob.size) {
-      recInfo.textContent = "nothing was recorded";
+      say("nothing was recorded");
       recSave.hidden = true;
       return;
     }
@@ -2995,7 +3109,7 @@
       return;
     }
 
-    recInfo.textContent = "tidying the file";
+    say("tidying the file");
     blob.arrayBuffer().then(function (raw) {
       var tidy = null;
       try {
@@ -3016,7 +3130,8 @@
     recSave.href = saveUrl;
     recSave.download = "character." + kind;
     recSave.hidden = false;
-    recInfo.textContent = kind + ", " + (blob.size / 1048576).toFixed(1) + " MB" + note;
+    say(kind + ", " + (blob.size / 1048576).toFixed(1) + " MB" + note +
+        " - check your downloads, or use the button");
 
     /* Straight to the downloads folder, since that is the point of the take.
        A browser set to refuse a download it did not see asked for will ignore
@@ -3031,7 +3146,7 @@
       arming = false;
       recBtn.classList.remove("is-live");
       recLabel.textContent = "Export to video";
-      recInfo.textContent = "ready";
+      say("ready");
       setPlaying(false);
       return;
     }
@@ -3044,7 +3159,7 @@
     if (drawing) { cancelAnimationFrame(drawing); drawing = 0; }
     if (painting) { clearInterval(painting); painting = 0; }
     setPlaying(false);
-    recInfo.textContent = "saving";
+    say("saving");
     recBtn.classList.remove("is-live");
     recLabel.textContent = "Export to video";
 

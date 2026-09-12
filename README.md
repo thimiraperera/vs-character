@@ -68,6 +68,20 @@ where neither one covers the square and the backdrop shows through the pair of
 them: at the midpoint of a 50/50 fade a quarter of the background comes through,
 and that is what reads as the picture vanishing before the next appears.
 
+Stepping again before a dissolve has finished puts three pictures in play, and
+all three are drawn. The settled one stays underneath and opaque; the one the
+interrupted dissolve was bringing in is held exactly where it had got to; the
+new one rises over both. Nothing is snapped up to full and nothing is dropped to
+nothing, because either of those uncovers a picture the eye had already moved
+on from, and that is what an old picture flashing actually is. Their depth is
+set explicitly rather than left to the document order, which would otherwise
+decide it and get it wrong.
+
+The canvas paints the same three. Measured on a take that steps every 250ms
+through a 420ms dissolve, a frame in the middle of the pile-up is 20% of the
+first picture, 40% of the second and 40% of the third, with none of the
+backdrop anywhere.
+
 ## A name under each picture
 
 Every picture can carry its own name, not just every square. The field in the
@@ -358,10 +372,13 @@ already carries keyframes is left alone. **Clear** is what empties the track.
 Turn Capture off and Play replays the track instead. A key held down still wins,
 so a replay can be taken over at any point.
 
-To adjust: drag a keyframe along its lane to retime it, or select one and use
-the nudge buttons for a tenth of a second at a time. Delete removes the selected
-one. Dragging the ruler runs the scene under the pointer, so a change can be
-watched in place rather than guessed at.
+To adjust: click a keyframe to select it, then drag it along its lane to retime
+it, or use the nudge buttons for a tenth of a second at a time. **Delete**
+removes it, and so does the Delete or Backspace key.
+
+Dragging the ruler runs the scene under the pointer, so a change can be watched
+in place rather than guessed at. The two buttons beside Clear jump to the start
+and to the end of the take, as do Home and End.
 
 The wheel runs along the timeline. Ctrl and the wheel zooms it instead, up to
 40x, about the moment under the pointer so that moment stays put while the strip

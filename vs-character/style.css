@@ -608,6 +608,14 @@ body{
 
 .note.is-bad{ color: #e0745f; }
 
+/* Something the panel needs you to read, rather than something it is just
+   telling you. */
+.row-count.is-bad{
+  color: #e0745f;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
 /* ---------- add-images badge on each square ---------- */
 
 .slot-add{
