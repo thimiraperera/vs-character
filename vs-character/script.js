@@ -47,14 +47,23 @@
     var next = poses[pose];
     if (!next) return;
 
-    var prev = poses[current];
-    if (prev) prev.classList.remove("is-on");
+    for (var name in poses) {
+      if (Object.prototype.hasOwnProperty.call(poses, name) && poses[name] !== next) {
+        poses[name].classList.remove("is-on");
+      }
+    }
     next.classList.add("is-on");
     current = pose;
 
     /* Widen the contact shadow a touch when the stance opens up. */
     var wide = pose === "shrugging" || pose === "pointing-left" || pose === "pointing-right";
     castShadow.style.width = wide ? "48%" : "42%";
+
+    /* The mouth belongs to the pose that has just left, so it is asked for
+       again on the next tick rather than held until its turn comes round. */
+    mouthNow = null;
+    lastMouth = null;
+    mouthAt = 0;
 
     noteKeyframe("pose", pose);
   }
@@ -1526,6 +1535,15 @@
   }
 
   function showFace(img) {
+    /* A face frame is not a face. It is the whole character drawn again with
+       a different mouth, and it carries the class the bodies carry, so one
+       belonging to another pose does not overlay her, it doubles her: two
+       bodies at once, each with an arm up. The mouth is only refreshed every
+       70 to 130ms, so an arrow key pressed between two of those left the old
+       pose's frame lit over the new pose's body for up to a tenth of a
+       second. Nothing here may show a frame that is not the pose on screen. */
+    if (img && img.dataset.pose !== current) img = null;
+
     if (activeFace === img) return;
     if (activeFace) activeFace.classList.remove("is-on");
     activeFace = img || null;
@@ -2102,6 +2120,14 @@
     var now = performance.now();
     var set = faces[current] || { blink: null, mouths: [], byShape: {} };
 
+    /* Whatever else has gone on, the body named by current is the one showing.
+       This costs two class reads every 40ms and it means she cannot vanish:
+       any path that ever cleared the mark without setting it again would look
+       exactly like the character disappearing, and there would be nothing on
+       screen to say why. */
+    var body = poses[current];
+    if (body && !body.classList.contains("is-on")) body.classList.add("is-on");
+
     /* Blinks come every couple of seconds, a shade irregular, now and then as
        a quick pair. They carry on while paused, so she looks alive in a hold. */
     if (!blinkAt) blinkAt = now + 900 + Math.random() * BLINK_SPREAD;
@@ -2281,7 +2307,7 @@
        exported file and the preview on the same shape. */
     faceTick();
 
-    if (activeFace && activeFace.naturalWidth) {
+    if (activeFace && activeFace.naturalWidth && activeFace.dataset.pose === current) {
       var fx = boxOf(activeFace);
       brush.drawImage(activeFace, fx.x, fx.y, fx.w, fx.h);
     }

@@ -403,6 +403,16 @@ running, her mouth moves, stepping between frames at an uneven pace so it does
 not look mechanical. Both are drawn into the recording. Neither is a keyframe;
 they happen on their own.
 
+A face frame is not a face. It is the whole character drawn again with a
+different mouth, and it carries the same class the bodies carry, so one left
+over from another pose does not overlay her: it doubles her, two bodies at
+once, each with an arm up. The mouth is only refreshed every 70 to 130ms, so an
+arrow key pressed between two of those used to leave the old pose's frame lit
+over the new pose's body for up to a tenth of a second. Nothing may now show a
+frame that does not belong to the pose on screen, a pose change asks for a
+fresh mouth at once rather than waiting its turn, and the recording refuses to
+paint one that does not match either.
+
 The blink frames are in. The mouth reads from up to five shapes beside each
 pose, `<pose>-talk-a.webp` through `<pose>-talk-s.webp`, and picks among whichever
 exist: never the same one twice running, each held 70 to 130ms, with the odd
